@@ -15,6 +15,7 @@
 #include "vad.h"
 #include "audio_capture.h"
 #include "cloud_stt_worker.h"
+#include "json_websocket_streaming_worker.h"
 #include "send_input.h"
 #include "mvi_utils.h"
 #include "mvi_config.h"
@@ -214,10 +215,37 @@ int main()
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
 
-    // Set up token
-    g_cloud_token = mvi_utils::retrive_token();
-    g_language = mvi_config::GetLanguage();
-    g_polish_text = mvi_config::GetPolishTextEnabled();
+    const mvi_config::RuntimeConfig runtime_config = mvi_config::LoadRuntimeConfig();
+    g_cloud_token = runtime_config.asr.token;
+    g_language = runtime_config.language;
+    g_polish_text = runtime_config.polish_text;
+    g_notification_sound = runtime_config.notification_sound;
+    g_output_method = ParseTextOutputMethod(runtime_config.output_method);
+
+    if (!mvi_config::GetLastLoadError().empty())
+    {
+        const std::string message = mvi_config::GetLastLoadError();
+        MessageBoxA(nullptr, message.c_str(), "MetasequoiaVoiceInput - Configuration Error", MB_ICONERROR);
+        if (need_com_uninitialize)
+        {
+            CoUninitialize();
+        }
+        return 1;
+    }
+
+    const bool safe_asr_endpoint = runtime_config.stt_provider == "json_websocket_streaming"
+        ? mvi_config::IsSafeStreamingEndpoint(runtime_config.asr.endpoint)
+        : mvi_config::IsSafeApiEndpoint(runtime_config.asr.endpoint);
+    if (!safe_asr_endpoint || !mvi_config::IsSafeApiEndpoint(runtime_config.polish.endpoint))
+    {
+        const char *message = "config.toml contains an unsafe API endpoint.";
+        MessageBoxA(nullptr, message, "MetasequoiaVoiceInput - Configuration Error", MB_ICONERROR);
+        if (need_com_uninitialize)
+        {
+            CoUninitialize();
+        }
+        return 1;
+    }
 
     printf("--- METASEQUOIA VOICE INPUT START ---\n");
     fflush(stdout);
@@ -225,13 +253,22 @@ int main()
     try
     {
         VadSegmenter vad;
-        std::unique_ptr<SttService> stt = std::make_unique<CloudSttWorker>(g_cloud_token);
+        std::unique_ptr<SttService> stt;
+        if (runtime_config.stt_provider == "json_websocket_streaming")
+        {
+            stt = std::make_unique<JsonWebSocketStreamingWorker>(runtime_config.asr.endpoint, runtime_config.asr.token, runtime_config.language, runtime_config.streaming_chunk_ms);
+            printf("[INIT] JSON WebSocket streaming ASR Ready.\n");
+        }
+        else
+        {
+            stt = std::make_unique<CloudSttWorker>(runtime_config.asr.token, runtime_config.asr.endpoint);
+            printf("[INIT] Cloud HTTP STT Ready.\n");
+        }
         std::unique_ptr<TextPolisher> text_polisher;
-        printf("[INIT] Cloud STT Ready.\n");
 
         if (g_polish_text)
         {
-            text_polisher = std::make_unique<TextPolisher>(g_cloud_token, g_language);
+            text_polisher = std::make_unique<TextPolisher>(runtime_config.polish.token, runtime_config.language, runtime_config.polish.endpoint);
             printf("[INIT] Text polishing enabled.\n");
         }
         else
@@ -291,7 +328,7 @@ int main()
                         printf("[POLISH] Output: %s\n", final_text.c_str());
                     }
                     fflush(stdout);
-                    send_text(mvi_utils::utf8_to_wstring(final_text));
+                    send_text(mvi_utils::utf8_to_wstring(final_text), g_output_method);
                 }
             }
         });
@@ -434,7 +471,10 @@ int main()
                         toggle_mode_active = true;
                         wave_overlay.show();
                         wave_overlay.set_listening(true);
-                        cue_player.play_start();
+                        if (g_notification_sound)
+                        {
+                            cue_player.play_start();
+                        }
                         printf("[AUDIO] Started (Ctrl+F9 toggle mode).\n");
                         fflush(stdout);
                     }
@@ -447,7 +487,10 @@ int main()
                     wave_overlay.set_listening(false);
                     wave_overlay.set_input_level(0.0f);
                     wave_overlay.hide();
-                    cue_player.play_end();
+                    if (g_notification_sound)
+                    {
+                        cue_player.play_end();
+                    }
                     auto samples = vad.take_audio();
                     if (!samples.empty())
                     {

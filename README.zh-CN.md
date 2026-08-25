@@ -12,13 +12,9 @@
 
 [https://github.com/metasequoiaime/MetasequoiaVoiceInput/releases](https://github.com/metasequoiaime/MetasequoiaVoiceInput/releases)
 
-2. 将本项目 `assets` 文件夹中的**所有内容**复制到：
+2. 解压发布包到任意可写目录。程序从 `MetasequoiaVoiceInput.exe` 同级目录读取 `config.toml`，无需复制文件到 `%LOCALAPPDATA%`。
 
-```
-$env:LOCALAPPDATA\MetasequoiaVoiceInput\
-```
-
-3. 打开 `config.toml` 文件，填入你自己的 SiliconFlow API Token。
+3. 右键点击托盘图标，选择“设置”，在 WinUI 风格的设置面板中填写 API Token 和其他参数。设置按“语音识别 / 文本处理 / 常规”分组展示；保存后重启程序生效。
 
 4. 运行：
 
@@ -42,21 +38,15 @@ MetasequoiaVoiceInput.exe
 
 ## 配置说明
 
-编辑：
+优先通过托盘菜单的“设置”打开配置面板。配置文件位于程序目录：
 
-```
-$env:LOCALAPPDATA\MetasequoiaVoiceInput\config.toml
-```
-
-e.g. 在我的系统上，路径为：
-
-```
-C:\Users\sonnycalcr\AppData\Local\MetasequoiaVoiceInput\config.toml
+```text
+<程序目录>\config.toml
 ```
 
-（如果不存在请手动创建）
+设置面板会创建并保存该文件。所有 API endpoint、ASR/润色 Token、语言、提示音和文本处理开关都可在其中修改；保存后重启应用生效。
 
-下面是一个完整配置示例：
+下面是生成的配置示例：
 
 ```toml
 # 自动语音识别（ASR）配置
@@ -65,8 +55,8 @@ C:\Users\sonnycalcr\AppData\Local\MetasequoiaVoiceInput\config.toml
 endpoint = "https://api.siliconflow.cn/v1/audio/transcriptions"
 # 服务提供商（如：azure、openai、deepgram 等）
 provider = "siliconflow"
-# API 访问令牌
-token = "<YOUR_OWN_TOKE>"
+# API Token（在设置面板中填写）
+token = ""
 
 # 文本润色配置
 [polish_api]
@@ -74,8 +64,8 @@ token = "<YOUR_OWN_TOKE>"
 endpoint = "https://api.siliconflow.cn/v1/chat/completions"
 # 服务提供商（如：azure、openai、deepgram 等）
 provider = "siliconflow"
-# API 访问令牌
-token = "<YOUR_OWN_TOKE>"
+# API Token（在设置面板中填写）
+token = ""
 
 # 基础设置
 [settings]
@@ -85,21 +75,21 @@ language = "zh-cn"
 notification_sound = true
 # 上屏前是否进行文本润色
 polish_text = false
-# 可选值：local_whisper, cloud_siliconflow
+# ASR 传输方式：cloud_siliconflow（HTTP 文件转写）或 json_websocket_streaming（统一 JSON WebSocket 流式协议）
 stt_provider = "cloud_siliconflow"
+# 流式模式每个 PCM16 binary frame 的时长，范围 20-200
+streaming_chunk_ms = 40
+# 上屏方式：send_input（默认）或 clipboard_paste（Ctrl+V 粘贴）
+output_method = "send_input"
 ```
 
 ---
 
 ## 图形界面设置
 
-除了手动修改 `config.toml`，你也可以通过设置窗口修改配置：
+右键点击托盘图标后选择“设置”，即可打开 WinUI 风格的设置窗口。窗口按“语音识别”“文本处理”“常规”和“关于”分组，避免手动查找或编辑配置文件。默认使用 SendInput 上屏；“Ctrl+V 粘贴”兼容部分应用，但会覆盖当前剪贴板内容。
 
-![](https://i.imgur.com/Q3Jct2Z.png)
-
-![](https://i.imgur.com/9j2IV9X.png)
-
-![](https://i.imgur.com/1F47neV.png)
+流式识别可选择“JSON WebSocket 流式 ASR”。它使用统一协议：start JSON、PCM16 binary 音频帧、stop JSON，以及 partial/final/error 响应。完整协议见 [JSON WebSocket Streaming ASR](docs/json-websocket-streaming-asr.md)。
 
 ---
 

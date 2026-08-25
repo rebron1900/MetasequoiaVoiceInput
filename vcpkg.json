@@ -4,6 +4,7 @@
     "curl",
     "nlohmann-json",
     "tomlplusplus",
-    "webview2"
+    "webview2",
+    "ixwebsocket"
   ]
 }

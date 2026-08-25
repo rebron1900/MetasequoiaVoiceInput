@@ -12,7 +12,7 @@ static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *use
     return size * nmemb;
 }
 
-CloudSttWorker::CloudSttWorker(const std::string &api_token) : api_token_(api_token)
+CloudSttWorker::CloudSttWorker(std::string api_token, std::string api_url) : api_token_(std::move(api_token)), api_url_(std::move(api_url))
 {
     curl_global_init(CURL_GLOBAL_ALL);
 }

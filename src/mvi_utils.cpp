@@ -1,5 +1,6 @@
 #include "mvi_utils.h"
-#include "mvi_config.h"
+
+#include <filesystem>
 #include <windows.h>
 
 // Convert UTF-8 std::string to std::wstring
@@ -11,11 +12,6 @@ std::wstring mvi_utils::utf8_to_wstring(const std::string &str)
     std::wstring wstrTo(size_needed, 0);
     MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstrTo[0], size_needed);
     return wstrTo;
-}
-
-std::string mvi_utils::retrive_token()
-{
-    return mvi_config::GetApiToken();
 }
 
 /**
@@ -112,16 +108,31 @@ RECT mvi_utils::GetMainMonitorCoordinates()
     return coordinates;
 }
 
-std::wstring mvi_utils::resolve_asset_audio_path(std::string filename)
+std::wstring mvi_utils::GetExecutableDirectory()
 {
-    std::string audio_path;
-    char *buf = nullptr;
-    size_t sz = 0;
-    // Use _dupenv_s instead of getenv to avoid C4996 warning and ensure thread safety
-    if (_dupenv_s(&buf, &sz, "LOCALAPPDATA") == 0 && buf != nullptr)
+    std::wstring path(MAX_PATH, L'\0');
+    while (true)
     {
-        audio_path = std::string(buf) + "\\MetasequoiaVoiceInput\\audios\\" + filename;
-        free(buf);
+        const DWORD length = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+        if (length == 0)
+        {
+            return L"";
+        }
+        if (length < path.size())
+        {
+            path.resize(length);
+            return std::filesystem::path(path).parent_path().wstring();
+        }
+        path.resize(path.size() * 2);
     }
-    return utf8_to_wstring(audio_path);
+}
+
+std::wstring mvi_utils::resolve_asset_audio_path(const std::string &filename)
+{
+    const std::wstring directory = GetExecutableDirectory();
+    if (directory.empty())
+    {
+        return L"";
+    }
+    return (std::filesystem::path(directory) / L"audios" / utf8_to_wstring(filename)).wstring();
 }

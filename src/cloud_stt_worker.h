@@ -5,7 +5,7 @@
 class CloudSttWorker : public SttService
 {
   public:
-    explicit CloudSttWorker(const std::string &api_token);
+    CloudSttWorker(std::string api_token, std::string api_url);
     ~CloudSttWorker();
 
     std::string recognize(const std::vector<float> &pcm) override;

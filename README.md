@@ -8,7 +8,9 @@ This is a voice input module for [MetasequoiaImeTsf](https://github.com/metasequ
 
 Download release exe file from [releases](https://github.com/metasequoiaime/MetasequoiaVoiceInput/releases).
 
-Then, copy all the contents of this project's `assets` folder to `$env:LOCALAPPDATA\MetasequoiaVoiceInput\`. And replace your siliconflow token in `config.toml`.
+Extract the release archive to any writable directory. The application reads `config.toml` beside `MetasequoiaVoiceInput.exe`; no files need to be copied to `%LOCALAPPDATA%`.
+
+Right-click the tray icon and choose **Settings** to configure API tokens and behavior in the tabbed WinUI-style settings panel. Restart the app after saving settings.
 
 Then, run `MetasequoiaVoiceInput.exe`.
 
@@ -21,15 +23,17 @@ Then, run `MetasequoiaVoiceInput.exe`.
 
 ## Configuration
 
-Edit `$env:LOCALAPPDATA\MetasequoiaVoiceInput\config.toml` (create if not exists) to configure the application.
+Use **Settings** from the tray menu. The configuration file is stored beside the executable:
 
-e.g. in my system, the path is:
-
-```
-C:\Users\sonnycalcr\AppData\Local\MetasequoiaVoiceInput\config.toml
+```text
+<application directory>\config.toml
 ```
 
-Below is a template:
+The tabbed settings panel groups ASR, text processing, and general behavior. API endpoints, ASR and polishing tokens, language, cue sounds, text processing, and text output method are all saved there. `SendInput` is the default. `Ctrl+V` output offers compatibility with some applications but replaces the current clipboard contents. Restart the app after saving.
+
+For low-latency ASR, select **JSON WebSocket Streaming ASR** and point it to a compatible service. The protocol uses start JSON, PCM16 binary audio frames, stop JSON, and partial/final/error response events; see [JSON WebSocket Streaming ASR](docs/json-websocket-streaming-asr.md).
+
+Below is the generated configuration template:
 
 ```toml
 # 自动语音识别（ASR）配置
@@ -38,8 +42,8 @@ Below is a template:
 endpoint = "https://api.siliconflow.cn/v1/audio/transcriptions"
 # 服务提供商（如：azure、openai、deepgram 等）
 provider = "siliconflow"
-# API 访问令牌
-token = "<YOUR_OWN_TOKE>"
+# API token. Configure it in the settings window.
+token = ""
 
 # 文本润色配置
 [polish_api]
@@ -47,8 +51,8 @@ token = "<YOUR_OWN_TOKE>"
 endpoint = "https://api.siliconflow.cn/v1/chat/completions"
 # 服务提供商（如：azure、openai、deepgram 等）
 provider = "siliconflow"
-# API 访问令牌
-token = "<YOUR_OWN_TOKE>"
+# API token. Configure it in the settings window.
+token = ""
 
 # 基础设置
 [settings]
@@ -58,8 +62,12 @@ language = "zh-cn"
 notification_sound = true
 # 上屏前是否要先进行文本润色
 polish_text = false
-# 可以选择的值有：local_whisper, cloud_siliconflow
+# ASR transport: cloud_siliconflow (HTTP file transcription) or json_websocket_streaming
 stt_provider = "cloud_siliconflow"
+# Streaming PCM16 binary frame size, 20-200 ms
+streaming_chunk_ms = 40
+# Text output: send_input (default) or clipboard_paste (Ctrl+V)
+output_method = "send_input"
 ```
 
 You can also change these config in settings window:

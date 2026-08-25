@@ -1,873 +1,422 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>(MVI)Settings</title>
-  <link rel="icon" href="./imgs/app.png">
+  <title>水杉记言 - 设置</title>
+  <link rel="icon" href="./imgs/app.png" />
   <style>
     :root {
-      --accent-color: #8e8cd8;
-      --bg-color: #202020;
-      --sidebar-hover: rgba(255, 255, 255, 0.08);
-      --item-active: rgba(255, 255, 255, 0.06);
-      --text-color: #f3f3f3;
-      --subtext-color: #c7c7c7;
-      --border-color: rgba(255, 255, 255, 0.08);
-      --card-bg: rgba(38, 38, 38, 0.6);
-      --input-bg: rgba(45, 45, 45, 0.8);
-      --danger: #c95f5f;
-      --ok: #4caf81;
+      color-scheme: dark;
+      --accent: #60cdff;
+      --accent-hover: #89d9ff;
+      --canvas: #202020;
+      --surface: #292929;
+      --surface-hover: #323232;
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #f5f5f5;
+      --subtle: #c9c9c9;
+      --muted: #a0a0a0;
+      --danger: #ff99a4;
+      --success: #6ccb5f;
     }
 
-    * {
-      box-sizing: border-box;
-      font-family: "Noto Sans SC", "Segoe UI Variable", "Segoe UI", sans-serif;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      width: 100vw;
-      height: 100vh;
-      display: flex;
-      color: var(--text-color);
-      background: var(--bg-color);
-      overflow: hidden;
+      min-width: 640px;
+      min-height: 520px;
+      background: var(--canvas);
+      color: var(--text);
+      font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
     }
 
-    .sidebar {
-      width: 220px;
-      padding: 16px 10px;
-      overflow-y: auto;
-      position: relative;
-      /* scrollbar-width: thin; */
-      scrollbar-color: rgba(170, 170, 170, 0.35) transparent;
-    }
+    .shell { height: 100vh; display: flex; flex-direction: column; }
 
-    .sidebar-header {
+    .titlebar {
+      min-height: 72px;
+      padding: 18px 32px 12px;
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 0 10px 16px;
-      margin-bottom: 6px;
-    }
-
-    .sidebar-header .logo {
-      width: 28px;
-      height: 28px;
-      border-radius: 6px;
-      object-fit: cover;
-      display: block;
-    }
-
-    .sidebar-header .name {
-      font-size: 18px;
-      font-weight: 600;
-    }
-
-    .nav-item {
-      margin: 4px 6px;
-      padding: 10px 12px;
-      border-radius: 8px;
-      color: #e8e8e8;
-      cursor: default;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      position: relative;
-      user-select: none;
-    }
-
-    .nav-item:hover {
-      background: var(--sidebar-hover);
-    }
-
-    .nav-item.active {
-      background: var(--item-active);
-    }
-
-    .nav-indicator {
-      position: absolute;
-      left: 0;
-      top: 0;
-      width: 4px;
-      height: 18px;
-      border-radius: 4px;
-      background: var(--accent-color);
-      pointer-events: none;
-      opacity: 0;
-      z-index: 2;
-    }
-
-    .nav-indicator.ready {
-      transition: transform 0.24s ease, opacity 0.18s ease;
-    }
-
-    .content {
-      flex: 1;
-      overflow-y: auto;
-      padding: 20px;
-      /* scrollbar-width: thin; */
-      scrollbar-color: rgba(170, 170, 170, 0.35) transparent;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    .sidebar::-webkit-scrollbar,
-    .content::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
-    }
-
-    .sidebar::-webkit-scrollbar-track,
-    .content::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    .sidebar::-webkit-scrollbar-thumb,
-    .content::-webkit-scrollbar-thumb {
-      background: rgba(170, 170, 170, 0.35);
-      border-radius: 3px;
-    }
-
-    .sidebar::-webkit-scrollbar-thumb:hover,
-    .content::-webkit-scrollbar-thumb:hover {
-      background: rgba(205, 205, 205, 0.45);
-    }
-
-    .content-page {
-      display: none;
-      width: 100%;
-      max-width: 800px;
-    }
-
-    .content-page.active {
-      display: block;
-    }
-
-    .page-title {
-      margin: 0 0 14px;
-      font-size: 20px;
-      font-weight: 600;
-    }
-
-    .section {
-      background: var(--card-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
-      padding: 16px;
-      margin-bottom: 16px;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
-    }
-
-    .section-title {
-      margin: 0 0 12px;
-      color: #d2d2d2;
-      font-size: 15px;
-      font-weight: 600;
-    }
-
-    .about-text {
-      margin: 0;
-      color: #dfdfdf;
-      line-height: 1.7;
-      font-size: 14px;
-    }
-
-    .about-meta {
-      margin: 10px 0 0;
-      color: var(--subtext-color);
-      font-size: 13px;
-      line-height: 1.7;
-    }
-
-    .about-link-row {
-      margin-top: 12px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .about-link-label {
-      color: var(--subtext-color);
-      font-size: 13px;
-    }
-
-    .about-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      border-radius: 999px;
-      border: 1px solid var(--border-color);
-      background: rgba(255, 255, 255, 0.04);
-      color: #e8e4ff;
-      font-size: 13px;
-      text-decoration: none;
-      transition: background 0.2s ease, border-color 0.2s ease, transform 0.18s ease;
-    }
-
-    .about-link:hover {
-      background: rgba(142, 140, 216, 0.2);
-      border-color: rgba(142, 140, 216, 0.55);
-      transform: translateY(-1px);
-    }
-
-    .about-link:focus-visible {
-      outline: 2px solid rgba(142, 140, 216, 0.55);
-      outline-offset: 2px;
-    }
-
-    .field {
-      display: grid;
-      gap: 6px;
-      margin-bottom: 12px;
-    }
-
-    .field:last-child {
-      margin-bottom: 0;
-    }
-
-    .field label {
-      font-size: 13px;
-      color: var(--subtext-color);
-    }
-
-    input[type="text"],
-    input[type="password"] {
-      width: 100%;
-      background: var(--input-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      color: #f3f3f3;
-      padding: 9px 10px;
-      font-size: 14px;
-      outline: none;
-    }
-
-    input[type="text"]:focus,
-    input[type="password"]:focus {
-      border-color: var(--accent-color);
-    }
-
-    input[type="password"] {
-      letter-spacing: 2px;
-      font-family: "Segoe UI", sans-serif;
-    }
-
-    .dropdown {
-      position: relative;
-      width: 100%;
-    }
-
-    .dropdown-toggle {
-      width: 100%;
-      background: var(--input-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      color: #f3f3f3;
-      padding: 9px 10px;
-      font-size: 14px;
-      display: flex;
       justify-content: space-between;
-      align-items: center;
-      cursor: pointer;
-      text-align: left;
+      gap: 24px;
     }
 
-    .dropdown-toggle:hover {
-      background: rgba(50, 50, 50, 0.9);
-    }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .brand img { width: 32px; height: 32px; border-radius: 6px; }
+    .brand-copy { min-width: 0; }
+    .brand-name { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.25; }
+    .brand-caption { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
+    .config-path { color: var(--muted); font-size: 12px; text-align: right; }
 
-    .dropdown.open .dropdown-toggle {
-      border-color: var(--accent-color);
-    }
-
-    .arrow {
-      width: 18px;
-      height: 18px;
+    .tablist {
       display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
+      gap: 24px;
+      padding: 0 32px;
+      border-bottom: 1px solid var(--border);
     }
 
-    .arrow svg {
-      width: 18px;
-      height: 18px;
-      display: block;
-      transition: transform 0.4s ease;
-      transform-origin: center;
-    }
-
-    .dropdown.open .arrow svg {
-      transform: rotate(180deg);
-    }
-
-    .dropdown-menu {
-      display: none;
-      position: absolute;
-      top: calc(100% + 4px);
-      left: 0;
-      width: 100%;
-      background: #282828;
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
-      padding: 2px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-      z-index: 20;
-    }
-
-    .dropdown.open .dropdown-menu {
-      display: block;
-    }
-
-    .dropdown-item {
-      width: 100%;
+    .tab {
+      position: relative;
       border: 0;
       background: transparent;
-      color: #eee;
-      border-radius: 8px;
-      padding: 7px 8px;
-      text-align: left;
-      cursor: pointer;
+      color: var(--subtle);
+      padding: 12px 2px 14px;
+      font: inherit;
       font-size: 14px;
-    }
-
-    .dropdown-item:hover {
-      background: rgba(255, 255, 255, 0.08);
-      color: #fff;
-    }
-
-    .switch-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    }
-
-    .switch-row:last-child {
-      border-bottom: 0;
-    }
-
-    .switch-label {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .switch-label strong {
-      font-size: 14px;
-      font-weight: 500;
-    }
-
-    .switch-label span {
-      font-size: 12px;
-      color: var(--subtext-color);
-    }
-
-    .switch-input {
-      appearance: none;
-      -webkit-appearance: none;
-      width: 38px;
-      height: 20px;
-      border-radius: 999px;
-      background: #555;
-      position: relative;
       cursor: pointer;
-      transition: background 0.2s ease;
-      border: 1px solid transparent;
-      flex-shrink: 0;
     }
 
-    .switch-input::after {
+    .tab::after {
       content: "";
       position: absolute;
-      top: 50%;
-      left: 1px;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: #fff;
-      transform: translateY(-50%);
-      transition: transform 0.2s ease;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      left: 0;
+      right: 0;
+      bottom: -1px;
+      height: 3px;
+      background: transparent;
+      border-radius: 3px 3px 0 0;
     }
 
-    .switch-input:checked {
-      background: var(--accent-color);
-    }
+    .tab:hover { color: var(--text); }
+    .tab[aria-selected="true"] { color: var(--text); }
+    .tab[aria-selected="true"]::after { background: var(--accent); }
 
-    .switch-input:checked::after {
-      transform: translate(18px, -50%);
-    }
+    .content { flex: 1; overflow: auto; padding: 28px 32px; }
+    .page { display: none; max-width: 900px; }
+    .page.active { display: block; }
 
-    .actions {
-      margin-top: 18px;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      width: 100%;
-      max-width: 800px;
-    }
+    .page-title { margin: 0; font-size: 28px; font-weight: 600; line-height: 1.25; }
+    .page-description { margin: 8px 0 24px; color: var(--subtle); font-size: 14px; line-height: 1.6; }
 
-    .actions.hidden {
-      display: none;
-    }
-
-    button {
-      border: 0;
+    .settings-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 9px 14px;
-      cursor: default;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+    }
+
+    .card-title { margin: 0; font-size: 16px; font-weight: 600; }
+    .card-description { margin: 6px 0 18px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+    .field { display: grid; grid-template-columns: minmax(160px, 0.34fr) minmax(260px, 0.66fr); gap: 18px; align-items: center; padding: 12px 0; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+    .field:first-of-type { border-top: 0; padding-top: 0; }
+    .field:last-child { padding-bottom: 0; }
+    .field-label { font-size: 14px; font-weight: 500; }
+    .field-hint { margin: 3px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+
+    input, select {
+      width: 100%;
+      min-height: 34px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #1f1f1f;
+      color: var(--text);
+      padding: 6px 10px;
+      font: inherit;
       font-size: 14px;
     }
 
-    .btn-primary {
-      background: #3c2d47;
-      color: #fff;
+    input:hover, select:hover { background: #262626; }
+    input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 0; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+    .switch-row:first-of-type { border-top: 0; padding-top: 0; }
+    .switch-copy { min-width: 0; }
+    .switch-title { font-size: 14px; font-weight: 500; }
+    .switch-hint { margin: 3px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+
+    .switch { position: relative; flex: 0 0 auto; width: 40px; height: 20px; }
+    .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    .switch-track { position: absolute; inset: 0; border-radius: 10px; background: #5f5f5f; transition: background 120ms ease; cursor: pointer; }
+    .switch-track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: white; transition: transform 120ms ease; }
+    .switch input:checked + .switch-track { background: var(--accent); }
+    .switch input:checked + .switch-track::after { transform: translateX(20px); }
+
+    .notice { display: flex; gap: 10px; padding: 12px 14px; border-radius: 6px; background: rgba(96, 205, 255, 0.1); color: #d7f2ff; font-size: 13px; line-height: 1.5; }
+    .notice strong { font-weight: 600; }
+
+    .footer {
+      min-height: 72px;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border-top: 1px solid var(--border);
+      background: #242424;
     }
 
-    .btn-secondary {
-      background: #3a3a3a;
-      color: #f3f3f3;
-    }
+    .status { min-height: 20px; color: var(--subtle); font-size: 13px; }
+    .status.ok { color: var(--success); }
+    .status.err { color: var(--danger); }
+    .actions { display: flex; gap: 8px; }
+    .button { min-height: 32px; border: 1px solid transparent; border-radius: 4px; padding: 5px 16px; font: inherit; font-size: 14px; cursor: pointer; }
+    .button.secondary { background: #3a3a3a; color: var(--text); border-color: var(--border); }
+    .button.secondary:hover { background: #454545; }
+    .button.primary { background: var(--accent); color: #00344d; font-weight: 600; }
+    .button.primary:hover { background: var(--accent-hover); }
 
-    .status {
-      font-size: 13px;
-      color: var(--subtext-color);
-      min-height: 18px;
-    }
-
-    .status.ok {
-      color: var(--ok);
-    }
-
-    .status.err {
-      color: var(--danger);
-    }
+    .about-grid { display: grid; grid-template-columns: 150px 1fr; gap: 12px 18px; font-size: 14px; }
+    .about-grid dt { color: var(--muted); }
+    .about-grid dd { margin: 0; }
+    .about-grid a { color: var(--accent-hover); }
 
     @media (max-width: 760px) {
-      body {
-        flex-direction: column;
-      }
-
-      .sidebar {
-        width: 100%;
-        border-right: 0;
-        border-bottom: 1px solid var(--border-color);
-        padding: 10px;
-      }
-
-      .content {
-        padding: 12px;
-      }
+      body { min-width: 0; }
+      .titlebar, .tablist, .content, .footer { padding-left: 18px; padding-right: 18px; }
+      .titlebar { align-items: flex-start; flex-direction: column; gap: 8px; }
+      .config-path { text-align: left; }
+      .tablist { gap: 18px; overflow-x: auto; }
+      .field { grid-template-columns: 1fr; gap: 8px; }
+      .footer { align-items: flex-start; flex-direction: column; }
+      .actions { width: 100%; justify-content: flex-end; }
     }
   </style>
 </head>
-
 <body>
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <img class="logo" src="imgs/app.png" alt="App Logo" />
-      <div class="name">水杉记言</div>
-    </div>
-
-    <div class="nav-item active" data-target="api-page">🔌 API 配置</div>
-    <div class="nav-item" data-target="basic-page">🧩 基础设置</div>
-    <div class="nav-item" data-target="about-page">ℹ️ 关于</div>
-  </aside>
-
-  <main class="content">
-    <section id="api-page" class="content-page active">
-      <h1 class="page-title">API 配置</h1>
-
-      <div class="section">
-        <h2 class="section-title">ASR 接口（[asr_api]）</h2>
-        <div class="field">
-          <label for="asr-provider">provider</label>
-          <input id="asr-provider" type="text" value="siliconflow" />
-        </div>
-        <div class="field">
-          <label for="asr-token">token</label>
-          <input id="asr-token" type="password" value="sk-zrjxykdgontqnocayzmqezuumvktsxldoftdacgoljshyhgw" />
-        </div>
-        <div class="field">
-          <label for="asr-endpoint">endpoint</label>
-          <input id="asr-endpoint" type="text" value="https://api.siliconflow.cn/v1/audio/transcriptions" />
+  <div class="shell">
+    <header class="titlebar">
+      <div class="brand">
+        <img src="imgs/app.png" alt="水杉记言" />
+        <div class="brand-copy">
+          <h1 class="brand-name">水杉记言</h1>
+          <p class="brand-caption">语音输入设置</p>
         </div>
       </div>
+      <div class="config-path">配置文件保存在程序目录的 <code>config.toml</code></div>
+    </header>
 
-      <div class="section">
-        <h2 class="section-title">润色接口（[polish_api]）</h2>
-        <div class="field">
-          <label for="polish-provider">provider</label>
-          <input id="polish-provider" type="text" value="siliconflow" />
+    <nav class="tablist" role="tablist" aria-label="设置分类">
+      <button class="tab" id="tab-asr" role="tab" aria-selected="true" aria-controls="page-asr" data-page="page-asr">语音识别</button>
+      <button class="tab" id="tab-polish" role="tab" aria-selected="false" aria-controls="page-polish" data-page="page-polish">文本处理</button>
+      <button class="tab" id="tab-general" role="tab" aria-selected="false" aria-controls="page-general" data-page="page-general">常规</button>
+      <button class="tab" id="tab-about" role="tab" aria-selected="false" aria-controls="page-about" data-page="page-about">关于</button>
+    </nav>
+
+    <main class="content">
+      <section class="page active" id="page-asr" role="tabpanel" aria-labelledby="tab-asr">
+        <h2 class="page-title">语音识别</h2>
+        <p class="page-description">配置将录音转换为文字的云端服务。</p>
+        <div class="settings-card">
+          <h3 class="card-title">ASR 服务</h3>
+          <p class="card-description">可选择 HTTP 文件转写，或统一 JSON WebSocket 流式协议。切换传输方式会更新当前 ASR 地址和 Token。</p>
+          <div class="field">
+            <div><div class="field-label">传输方式</div><p class="field-hint">流式模式会在录音结束后将 16 kHz PCM16 音频分帧发送到 WebSocket 服务。</p></div>
+            <select id="stt-provider">
+              <option value="cloud_siliconflow">HTTP 文件转写（SiliconFlow 兼容）</option>
+              <option value="json_websocket_streaming">JSON WebSocket 流式 ASR</option>
+            </select>
+          </div>
+          <div class="field">
+            <div><div class="field-label">API 地址</div><p class="field-hint" id="asr-endpoint-hint">HTTP 模式填写音频转写接口 URL；流式模式填写 ws:// 或 wss:// 服务地址。</p></div>
+            <input id="asr-endpoint" type="url" inputmode="url" autocomplete="off" />
+          </div>
+          <div class="field" id="streaming-chunk-field" hidden>
+            <div><div class="field-label">音频分片</div><p class="field-hint">每个 WebSocket binary frame 的音频时长，建议 40 ms。</p></div>
+            <select id="streaming-chunk-ms"><option value="20">20 ms</option><option value="40">40 ms</option><option value="60">60 ms</option><option value="100">100 ms</option><option value="200">200 ms</option></select>
+          </div>
+          <div class="notice" id="streaming-protocol-notice" hidden><strong>协议</strong><span>录音结束后发送 start JSON、PCM16 binary 分帧和 stop JSON；服务端返回 partial、final 或 error JSON 事件。</span></div>
+          <div class="field">
+            <div><div class="field-label">API Token</div><p class="field-hint">Token 仅保存在本机的 config.toml。</p></div>
+            <input id="asr-token" type="password" autocomplete="off" spellcheck="false" />
+          </div>
         </div>
-        <div class="field">
-          <label for="polish-token">token</label>
-          <input id="polish-token" type="password" value="sk-zrjxykdgontqnocayzmqezuumvktsxldoftdacgoljshyhgw" />
+      </section>
+
+      <section class="page" id="page-polish" role="tabpanel" aria-labelledby="tab-polish">
+        <h2 class="page-title">文本处理</h2>
+        <p class="page-description">在上屏前清理明显的停顿词和重复内容。</p>
+        <div class="settings-card">
+          <h3 class="card-title">文本润色服务</h3>
+          <p class="card-description">关闭“上屏前文本处理”后，下列接口不会被调用。</p>
+          <div class="field">
+            <div><div class="field-label">服务提供方</div><p class="field-hint">用于记录配置来源。</p></div>
+            <input id="polish-provider" type="text" autocomplete="off" />
+          </div>
+          <div class="field">
+            <div><div class="field-label">API 地址</div><p class="field-hint">Chat Completions 接口的完整 URL。</p></div>
+            <input id="polish-endpoint" type="url" inputmode="url" autocomplete="off" />
+          </div>
+          <div class="field">
+            <div><div class="field-label">API Token</div><p class="field-hint">可以与语音识别服务使用不同 Token。</p></div>
+            <input id="polish-token" type="password" autocomplete="off" spellcheck="false" />
+          </div>
         </div>
-        <div class="field">
-          <label for="polish-endpoint">endpoint</label>
-          <input id="polish-endpoint" type="text" value="https://api.siliconflow.cn/v1/chat/completions" />
+      </section>
+
+      <section class="page" id="page-general" role="tabpanel" aria-labelledby="tab-general">
+        <h2 class="page-title">常规</h2>
+        <p class="page-description">调整语音输入的基础行为。</p>
+        <div class="settings-card">
+          <h3 class="card-title">输入体验</h3>
+          <div class="field">
+            <div><div class="field-label">偏好语言</div><p class="field-hint">用于文本处理的语言偏好。</p></div>
+            <select id="language"><option value="zh-cn">简体中文</option><option value="en-us">English (United States)</option></select>
+          </div>
+          <div class="field">
+            <div><div class="field-label">上屏方式</div><p class="field-hint">SendInput 不修改剪贴板；Ctrl+V 会覆盖当前剪贴板内容，以获得更广的应用兼容性。</p></div>
+            <select id="output-method">
+              <option value="send_input">SendInput（默认）</option>
+              <option value="clipboard_paste">Ctrl+V 粘贴</option>
+            </select>
+          </div>
+          <div class="switch-row">
+            <div class="switch-copy"><div class="switch-title" id="polish-text-label">上屏前文本处理</div><p class="switch-hint">启用后会在发送文字前调用文本处理服务。</p></div>
+            <label class="switch" aria-labelledby="polish-text-label"><input id="polish-text" type="checkbox" /><span class="switch-track"></span></label>
+          </div>
+          <div class="switch-row">
+            <div class="switch-copy"><div class="switch-title">提示音</div><p class="switch-hint">录音开始和停止时播放提示音。</p></div>
+            <label class="switch"><input id="notification-sound" type="checkbox" /><span class="switch-track"></span></label>
+          </div>
         </div>
+        <div class="notice"><strong>提示</strong><span>设置保存后需重启水杉记言，新的服务配置和行为选项才会应用到当前运行实例。</span></div>
+      </section>
+
+      <section class="page" id="page-about" role="tabpanel" aria-labelledby="tab-about">
+        <h2 class="page-title">关于</h2>
+        <p class="page-description">水杉记言是可独立使用的 Windows 语音输入工具。</p>
+        <div class="settings-card">
+          <dl class="about-grid">
+            <dt>使用方式</dt><dd>按住右 Alt 录音，松开后识别并输入文字。右 Alt + Space 可锁定录音，Ctrl + F9 可切换连续录音。</dd>
+            <dt>配置位置</dt><dd>与 <code>MetasequoiaVoiceInput.exe</code> 位于同一目录的 <code>config.toml</code>。</dd>
+            <dt>项目主页</dt><dd><a href="https://github.com/metasequoiaime/MetasequoiaVoiceInput" target="_blank" rel="noopener noreferrer">github.com/metasequoiaime/MetasequoiaVoiceInput</a></dd>
+            <dt>许可证</dt><dd>GPL-3.0</dd>
+          </dl>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="status" id="status" role="status" aria-live="polite">正在加载配置...</div>
+      <div class="actions">
+        <button class="button secondary" id="reset-btn" type="button">恢复默认</button>
+        <button class="button primary" id="save-btn" type="button">保存设置</button>
       </div>
-    </section>
-
-    <section id="basic-page" class="content-page">
-      <h1 class="page-title">基础设置</h1>
-
-      <div class="section">
-        <h2 class="section-title">[settings]</h2>
-
-        <div class="field">
-          <label for="language-btn">language</label>
-          <div class="dropdown" id="language-dropdown">
-            <button id="language-btn" class="dropdown-toggle" type="button">
-              <span class="dropdown-value">zh-cn</span>
-              <span class="arrow" aria-hidden="true">
-                <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M5.5 7.5L10 12L14.5 7.5" stroke="#cfcfcf" stroke-width="1.8" stroke-linecap="round"
-                    stroke-linejoin="round" />
-                </svg>
-              </span>
-            </button>
-            <div class="dropdown-menu">
-              <button class="dropdown-item" type="button" data-value="zh-cn">zh-cn</button>
-              <button class="dropdown-item" type="button" data-value="en-us">en-us</button>
-            </div>
-            <input id="language" type="hidden" value="zh-cn" />
-          </div>
-        </div>
-
-        <div class="field">
-          <label for="stt-provider-btn">stt_provider</label>
-          <div class="dropdown" id="stt-provider-dropdown">
-            <button id="stt-provider-btn" class="dropdown-toggle" type="button">
-              <span class="dropdown-value">cloud_siliconflow</span>
-              <span class="arrow" aria-hidden="true">
-                <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M5.5 7.5L10 12L14.5 7.5" stroke="#cfcfcf" stroke-width="1.8" stroke-linecap="round"
-                    stroke-linejoin="round" />
-                </svg>
-              </span>
-            </button>
-            <div class="dropdown-menu">
-              <button class="dropdown-item" type="button" data-value="local_whisper">local_whisper</button>
-              <button class="dropdown-item" type="button" data-value="cloud_siliconflow">cloud_siliconflow</button>
-            </div>
-            <input id="stt-provider" type="hidden" value="cloud_siliconflow" />
-          </div>
-        </div>
-
-        <div class="switch-row">
-          <div class="switch-label">
-            <strong>上屏前先进行文本润色</strong>
-            <span>polish_text</span>
-          </div>
-          <input id="polish-text" class="switch-input" type="checkbox" />
-        </div>
-
-        <div class="switch-row">
-          <div class="switch-label">
-            <strong>触发时播放提示音</strong>
-            <span>notification_sound</span>
-          </div>
-          <input id="notification-sound" class="switch-input" type="checkbox" checked />
-        </div>
-      </div>
-    </section>
-
-    <section id="about-page" class="content-page">
-      <h1 class="page-title">关于</h1>
-
-      <div class="section">
-        <h2 class="section-title">项目简介</h2>
-        <p class="about-text">
-          <span>水杉记言</span>(Metasequoia Voice
-          Input)是一个面向中文输入场景的开源语音输入工具，源代码在 GitHub 上可查看。本项目通过语音识别(ASR)将语音实时转换为文本，并可选接入文本润色能力，帮助你以更自然、更高效的方式完成输入。
-        </p>
-        <br>
-        <p class="about-text">
-          当前设置窗口用于管理 ASR API、润色 API 和基础行为配置。您可以在“API 配置”和“基础设置”中修改参数，并通过“保存设置”提交到宿主程序。
-        </p>
-        <br>
-        <div class="about-link-row">
-          <span class="about-link-label">GitHub:</span>
-          <a class="about-link" href="https://github.com/fanlumaster/MetasequoiaVoiceInput" target="_blank"
-            rel="noopener noreferrer">MetasequoiaVoiceInput ↗</a>
-        </div>
-        <div class="about-link-row">
-          <span class="about-link-label">作者的更多作品，Windows 文字输入法：</span>
-          <a class="about-link" href="https://github.com/fanlumaster/MetasequoiaImeTsf" target="_blank"
-            rel="noopener noreferrer">水杉输入法 ↗</a>
-        </div>
-      </div>
-    </section>
-
-    <div class="actions">
-      <button id="save-btn" class="btn-primary" type="button">保存设置</button>
-      <button id="reset-btn" class="btn-secondary" type="button">恢复默认</button>
-      <span id="status" class="status"></span>
-    </div>
-  </main>
+    </footer>
+  </div>
 
   <script>
     const defaultConfig = {
-      asr_api: {
-        provider: "siliconflow",
-        token: "sk-zrjxykdgontqnocayzmqezuumvktsxldoftdacgoljshyhgw",
-        endpoint: "https://api.siliconflow.cn/v1/audio/transcriptions"
-      },
-      polish_api: {
-        provider: "siliconflow",
-        token: "sk-zrjxykdgontqnocayzmqezuumvktsxldoftdacgoljshyhgw",
-        endpoint: "https://api.siliconflow.cn/v1/chat/completions"
-      },
-      settings: {
-        language: "zh-cn",
-        polish_text: false,
-        notification_sound: true,
-        stt_provider: "cloud_siliconflow"
-      }
+      asr_api: { provider: "siliconflow", token: "", endpoint: "https://api.siliconflow.cn/v1/audio/transcriptions" },
+      polish_api: { provider: "siliconflow", token: "", endpoint: "https://api.siliconflow.cn/v1/chat/completions" },
+      settings: { language: "zh-cn", polish_text: false, notification_sound: true, stt_provider: "cloud_siliconflow", output_method: "send_input", streaming_chunk_ms: 40 }
     };
 
     const $ = (id) => document.getElementById(id);
 
-    function setStatus(text, type) {
-      const el = $("status");
-      el.textContent = text;
-      el.classList.remove("ok", "err");
-      if (type) {
-        el.classList.add(type);
-      }
+    function setStatus(text, kind = "") {
+      const status = $("status");
+      status.textContent = text;
+      status.className = `status ${kind}`.trim();
     }
 
-    function mergeConfigWithDefaults(config) {
+    function mergedConfig(config) {
       const safe = config && typeof config === "object" ? config : {};
       const asr = safe.asr_api && typeof safe.asr_api === "object" ? safe.asr_api : {};
       const polish = safe.polish_api && typeof safe.polish_api === "object" ? safe.polish_api : {};
       const settings = safe.settings && typeof safe.settings === "object" ? safe.settings : {};
-
       return {
-        asr_api: {
-          provider: typeof asr.provider === "string" ? asr.provider : defaultConfig.asr_api.provider,
-          token: typeof asr.token === "string" ? asr.token : defaultConfig.asr_api.token,
-          endpoint: typeof asr.endpoint === "string" ? asr.endpoint : defaultConfig.asr_api.endpoint
-        },
-        polish_api: {
-          provider: typeof polish.provider === "string" ? polish.provider : defaultConfig.polish_api.provider,
-          token: typeof polish.token === "string" ? polish.token : defaultConfig.polish_api.token,
-          endpoint: typeof polish.endpoint === "string" ? polish.endpoint : defaultConfig.polish_api.endpoint
-        },
-        settings: {
-          language: typeof settings.language === "string" ? settings.language : defaultConfig.settings.language,
-          polish_text: typeof settings.polish_text === "boolean" ? settings.polish_text : defaultConfig.settings.polish_text,
-          notification_sound: typeof settings.notification_sound === "boolean" ? settings.notification_sound : defaultConfig.settings.notification_sound,
-          stt_provider: typeof settings.stt_provider === "string" ? settings.stt_provider : defaultConfig.settings.stt_provider
-        }
+        asr_api: { provider: typeof asr.provider === "string" ? asr.provider : defaultConfig.asr_api.provider, token: typeof asr.token === "string" ? asr.token : defaultConfig.asr_api.token, endpoint: typeof asr.endpoint === "string" ? asr.endpoint : defaultConfig.asr_api.endpoint },
+        polish_api: { provider: typeof polish.provider === "string" ? polish.provider : defaultConfig.polish_api.provider, token: typeof polish.token === "string" ? polish.token : defaultConfig.polish_api.token, endpoint: typeof polish.endpoint === "string" ? polish.endpoint : defaultConfig.polish_api.endpoint },
+        settings: { language: typeof settings.language === "string" ? settings.language : defaultConfig.settings.language, polish_text: typeof settings.polish_text === "boolean" ? settings.polish_text : defaultConfig.settings.polish_text, notification_sound: typeof settings.notification_sound === "boolean" ? settings.notification_sound : defaultConfig.settings.notification_sound, stt_provider: settings.stt_provider === "json_websocket_streaming" ? "json_websocket_streaming" : "cloud_siliconflow", output_method: settings.output_method === "clipboard_paste" ? "clipboard_paste" : "send_input", streaming_chunk_ms: [20, 40, 60, 100, 200].includes(settings.streaming_chunk_ms) ? settings.streaming_chunk_ms : 40 }
       };
     }
 
-    function readConfigFromForm() {
+    function applyConfig(config) {
+      const value = mergedConfig(config);
+      $("asr-endpoint").value = value.asr_api.endpoint;
+      $("asr-token").value = value.asr_api.token;
+      $("stt-provider").value = value.settings.stt_provider;
+      $("streaming-chunk-ms").value = String(value.settings.streaming_chunk_ms);
+      updateStreamingControls();
+      validateAsrEndpoint();
+      $("polish-provider").value = value.polish_api.provider;
+      $("polish-endpoint").value = value.polish_api.endpoint;
+      $("polish-token").value = value.polish_api.token;
+      $("language").value = value.settings.language;
+      $("output-method").value = value.settings.output_method;
+      $("polish-text").checked = value.settings.polish_text;
+      $("notification-sound").checked = value.settings.notification_sound;
+    }
+
+    function updateStreamingControls() {
+      const streaming = $("stt-provider").value === "json_websocket_streaming";
+      $("streaming-chunk-field").hidden = !streaming;
+      $("streaming-protocol-notice").hidden = !streaming;
+      $("asr-endpoint-hint").textContent = streaming
+        ? "填写 ws:// 或 wss:// 流式服务地址。服务必须实现本页所述 JSON WebSocket 协议。"
+        : "填写 OpenAI 兼容音频转写接口的完整 HTTPS URL。";
+    }
+
+    function validateAsrEndpoint() {
+      const endpoint = $("asr-endpoint").value;
+      const streaming = $("stt-provider").value === "json_websocket_streaming";
+      const localWs = /^ws:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i;
+      const valid = streaming
+        ? /^wss:\/\//i.test(endpoint) || localWs.test(endpoint)
+        : /^https:\/\//i.test(endpoint) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i.test(endpoint);
+      $("asr-endpoint").setCustomValidity(valid ? "" : streaming ? "请输入 wss:// 地址，或 localhost 的 ws:// 地址。" : "请输入 HTTPS 地址，或 localhost 的 HTTP 地址。");
+      return valid;
+    }
+
+    function readConfig() {
+      validateAsrEndpoint();
       return {
-        asr_api: {
-          provider: $("asr-provider").value.trim(),
-          token: $("asr-token").value.trim(),
-          endpoint: $("asr-endpoint").value.trim()
-        },
-        polish_api: {
-          provider: $("polish-provider").value.trim(),
-          token: $("polish-token").value.trim(),
-          endpoint: $("polish-endpoint").value.trim()
-        },
-        settings: {
-          language: $("language").value,
-          polish_text: $("polish-text").checked,
-          notification_sound: $("notification-sound").checked,
-          stt_provider: $("stt-provider").value
-        }
+        asr_api: { provider: $("stt-provider").value, endpoint: $("asr-endpoint").value.trim(), token: $("asr-token").value },
+        polish_api: { provider: $("polish-provider").value.trim(), endpoint: $("polish-endpoint").value.trim(), token: $("polish-token").value },
+        settings: { language: $("language").value, output_method: $("output-method").value, polish_text: $("polish-text").checked, notification_sound: $("notification-sound").checked, stt_provider: $("stt-provider").value, streaming_chunk_ms: Number($("streaming-chunk-ms").value) }
       };
     }
 
-    function applyConfigToForm(config) {
-      $("asr-provider").value = config.asr_api.provider;
-      $("asr-token").value = config.asr_api.token;
-      $("asr-endpoint").value = config.asr_api.endpoint;
+    $("stt-provider").addEventListener("change", () => { updateStreamingControls(); validateAsrEndpoint(); });
+    $("asr-endpoint").addEventListener("input", validateAsrEndpoint);
+    const tabs = Array.from(document.querySelectorAll(".tab"));
 
-      $("polish-provider").value = config.polish_api.provider;
-      $("polish-token").value = config.polish_api.token;
-      $("polish-endpoint").value = config.polish_api.endpoint;
-
-      $("language").value = config.settings.language;
-      $("polish-text").checked = config.settings.polish_text;
-      $("notification-sound").checked = config.settings.notification_sound;
-      $("stt-provider").value = config.settings.stt_provider;
-      syncDropdownText("language-dropdown");
-      syncDropdownText("stt-provider-dropdown");
+    function activateTab(tab, focus = false) {
+      tabs.forEach((item) => item.setAttribute("aria-selected", String(item === tab)));
+      document.querySelectorAll(".page").forEach((page) => page.classList.toggle("active", page.id === tab.dataset.page));
+      if (focus) { tab.focus(); }
     }
 
-    function closeAllDropdowns() {
-      document.querySelectorAll(".dropdown.open").forEach((el) => {
-        el.classList.remove("open");
-      });
-    }
-
-    function syncDropdownText(dropdownId) {
-      const dropdown = document.getElementById(dropdownId);
-      if (!dropdown) {
-        return;
-      }
-      const hiddenInput = dropdown.querySelector("input[type='hidden']");
-      const valueEl = dropdown.querySelector(".dropdown-value");
-      const activeItem = dropdown.querySelector(`.dropdown-item[data-value="${hiddenInput.value}"]`);
-      valueEl.textContent = activeItem ? activeItem.textContent : hiddenInput.value;
-    }
-
-    function initDropdown(dropdownId) {
-      const dropdown = document.getElementById(dropdownId);
-      if (!dropdown) {
-        return;
-      }
-      const toggle = dropdown.querySelector(".dropdown-toggle");
-      const hiddenInput = dropdown.querySelector("input[type='hidden']");
-
-      toggle.addEventListener("click", (event) => {
-        event.stopPropagation();
-        const willOpen = !dropdown.classList.contains("open");
-        closeAllDropdowns();
-        if (willOpen) {
-          dropdown.classList.add("open");
-        }
-      });
-
-      dropdown.querySelectorAll(".dropdown-item").forEach((item) => {
-        item.addEventListener("click", () => {
-          hiddenInput.value = item.dataset.value;
-          syncDropdownText(dropdownId);
-          dropdown.classList.remove("open");
-        });
-      });
-
-      syncDropdownText(dropdownId);
-    }
-
-    function ensureNavIndicator() {
-      const sidebar = document.querySelector(".sidebar");
-      if (!sidebar) {
-        return null;
-      }
-      let indicator = sidebar.querySelector(".nav-indicator");
-      if (!indicator) {
-        indicator = document.createElement("div");
-        indicator.className = "nav-indicator";
-        sidebar.appendChild(indicator);
-      }
-      return indicator;
-    }
-
-    function moveNavIndicatorToItem(item) {
-      const sidebar = document.querySelector(".sidebar");
-      const indicator = ensureNavIndicator();
-      if (!sidebar || !indicator || !item) {
-        return;
-      }
-
-      const barLeft = item.offsetLeft - 2;
-      const barTop = item.offsetTop + (item.offsetHeight - 18) / 2;
-      if (!indicator.classList.contains("ready")) {
-        indicator.classList.add("ready");
-        indicator.style.transition = "none";
-        indicator.style.transform = `translate(${barLeft}px, ${barTop}px)`;
-        indicator.style.opacity = "1";
-        requestAnimationFrame(() => {
-          indicator.style.transition = "";
-        });
-        return;
-      }
-      indicator.style.transform = `translate(${barLeft}px, ${barTop}px)`;
-      indicator.style.opacity = "1";
-    }
-
-    function updateActionsVisibility(targetId) {
-      const actions = document.querySelector(".actions");
-      if (!actions) {
-        return;
-      }
-      const shouldHide = targetId === "about-page";
-      actions.classList.toggle("hidden", shouldHide);
-    }
-
-    document.querySelectorAll(".nav-item").forEach((item) => {
-      item.addEventListener("click", () => {
-        document.querySelector(".nav-item.active")?.classList.remove("active");
-        item.classList.add("active");
-
-        document.querySelector(".content-page.active")?.classList.remove("active");
-        const targetId = item.dataset.target;
-        document.getElementById(targetId)?.classList.add("active");
-        updateActionsVisibility(targetId);
-        moveNavIndicatorToItem(item);
+    tabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => activateTab(tab));
+      tab.addEventListener("keydown", (event) => {
+        let targetIndex = index;
+        if (event.key === "ArrowRight") { targetIndex = (index + 1) % tabs.length; }
+        else if (event.key === "ArrowLeft") { targetIndex = (index - 1 + tabs.length) % tabs.length; }
+        else if (event.key === "Home") { targetIndex = 0; }
+        else if (event.key === "End") { targetIndex = tabs.length - 1; }
+        else { return; }
+        event.preventDefault();
+        activateTab(tabs[targetIndex], true);
       });
     });
-
     $("save-btn").addEventListener("click", () => {
-      const config = readConfigFromForm();
-      try {
-        if (window.chrome?.webview) {
-          window.chrome.webview.postMessage({ action: "save_settings", config });
-        } else {
-          setStatus("当前不在宿主环境，无法写入配置文件", "err");
-          return;
-        }
-      } catch (err) {
-        setStatus("保存失败: " + String(err), "err");
+      if (!validateAsrEndpoint() || !$("asr-endpoint").reportValidity()) { return; }
+      if (!window.chrome?.webview) { setStatus("当前不在应用宿主环境，无法保存配置。", "err"); return; }
+      setStatus("正在保存...");
+      window.chrome.webview.postMessage({ action: "save_settings", config: readConfig() });
+    });
+    $("reset-btn").addEventListener("click", () => { applyConfig(defaultConfig); setStatus("已恢复默认值，点击“保存设置”后写入文件。", "ok"); });
+
+    window.__applyHostConfig = (payload) => {
+      const hostPayload = payload && typeof payload === "object" && payload.config ? payload : { config: payload, loadError: "" };
+      applyConfig(hostPayload.config);
+      if (hostPayload.loadError) {
+        setStatus(`${hostPayload.loadError}；为保护现有文件，保存已被阻止。`, "err");
+        $("save-btn").disabled = true;
+      } else {
+        $("save-btn").disabled = false;
+        setStatus("已从程序目录加载 config.toml。", "ok");
       }
-    });
-
-    $("reset-btn").addEventListener("click", () => {
-      applyConfigToForm(defaultConfig);
-      setStatus("已恢复默认值", "ok");
-    });
-
-    document.addEventListener("click", () => {
-      closeAllDropdowns();
-    });
-
-    window.__applyHostConfig = (config) => {
-      const normalized = mergeConfigWithDefaults(config);
-      applyConfigToForm(normalized);
-      setStatus("已加载本地配置", "ok");
     };
+    window.__onHostSaveResult = (result) => { setStatus(result?.message || "保存失败。", result?.success ? "ok" : "err"); };
 
-    window.__onHostSaveResult = (result) => {
-      if (!result || typeof result !== "object") {
-        setStatus("保存结果无效", "err");
-        return;
-      }
-      const message = typeof result.message === "string" ? result.message : (result.success ? "设置已保存" : "保存失败");
-      setStatus(message, result.success ? "ok" : "err");
-    };
-
-    initDropdown("language-dropdown");
-    initDropdown("stt-provider-dropdown");
-    applyConfigToForm(defaultConfig);
-    updateActionsVisibility("api-page");
-    moveNavIndicatorToItem(document.querySelector(".nav-item.active"));
-
-    if (window.chrome?.webview) {
-      window.chrome.webview.postMessage({ action: "load_settings" });
-    }
-
-    window.addEventListener("resize", () => {
-      moveNavIndicatorToItem(document.querySelector(".nav-item.active"));
-    });
+    applyConfig(defaultConfig);
+    if (window.chrome?.webview) { window.chrome.webview.postMessage({ action: "load_settings" }); }
   </script>
 </body>
-
 </html>

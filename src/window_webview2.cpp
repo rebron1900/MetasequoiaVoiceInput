@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <intsafe.h>
 #include <nlohmann/json.hpp>
@@ -106,7 +107,9 @@ void SendSettingsConfigToWebView()
     }
 
     const std::string config_json = mvi_config::ReadConfigAsJson();
-    const std::wstring script = L"window.__applyHostConfig && window.__applyHostConfig(" + mvi_utils::utf8_to_wstring(config_json) + L");";
+    const std::string load_error = mvi_config::GetLastLoadError();
+    const nlohmann::json payload = {{"config", nlohmann::json::parse(config_json)}, {"loadError", load_error}};
+    const std::wstring script = L"window.__applyHostConfig && window.__applyHostConfig(" + mvi_utils::utf8_to_wstring(payload.dump()) + L");";
     g_state.settings_webview->ExecuteScript(script.c_str(), nullptr);
 }
 
@@ -177,55 +180,29 @@ void ApplyPendingSettingsPageIfNeeded()
     g_state.pending_settings_page.clear();
 }
 
-std::wstring GetDefaultTrayMenuHtmlPath(const std::wstring &app_name)
+std::wstring GetDefaultTrayMenuHtmlPath(const std::wstring &)
 {
-    std::wstring html_path;
-    char *buf = nullptr;
-    size_t sz = 0;
-    if (_dupenv_s(&buf, &sz, "LOCALAPPDATA") == 0 && buf != nullptr)
+    const std::wstring directory = mvi_utils::GetExecutableDirectory();
+    if (directory.empty())
     {
-        const std::string local_app_data(buf);
-        free(buf);
-        html_path = mvi_utils::utf8_to_wstring(local_app_data);
-        html_path += L"\\";
-        html_path += app_name;
-        html_path += L"\\html\\tray_menu.html";
+        return L"";
     }
-    return html_path;
+    return (std::filesystem::path(directory) / L"html" / L"tray_menu.html").wstring();
 }
 
-std::wstring GetDefaultSettingsHtmlPath(const std::wstring &app_name)
+std::wstring GetDefaultSettingsHtmlPath(const std::wstring &)
 {
-    std::wstring html_path;
-    char *buf = nullptr;
-    size_t sz = 0;
-    if (_dupenv_s(&buf, &sz, "LOCALAPPDATA") == 0 && buf != nullptr)
+    const std::wstring directory = mvi_utils::GetExecutableDirectory();
+    if (directory.empty())
     {
-        const std::string local_app_data(buf);
-        free(buf);
-        html_path = mvi_utils::utf8_to_wstring(local_app_data);
-        html_path += L"\\";
-        html_path += app_name;
-        html_path += L"\\html\\setting.html";
+        return L"";
     }
-    return html_path;
+    return (std::filesystem::path(directory) / L"html" / L"settings.html").wstring();
 }
 
 std::wstring GetFallbackSettingsHtmlPath(const std::wstring &app_name)
 {
-    std::wstring html_path;
-    char *buf = nullptr;
-    size_t sz = 0;
-    if (_dupenv_s(&buf, &sz, "LOCALAPPDATA") == 0 && buf != nullptr)
-    {
-        const std::string local_app_data(buf);
-        free(buf);
-        html_path = mvi_utils::utf8_to_wstring(local_app_data);
-        html_path += L"\\";
-        html_path += app_name;
-        html_path += L"\\html\\settings.html";
-    }
-    return html_path;
+    return GetDefaultSettingsHtmlPath(app_name);
 }
 
 bool IsFilePathValid(const std::wstring &path)
@@ -1022,7 +999,7 @@ void CreateSettingsWebViewIfNeeded()
                                         return S_OK;
                                     }
 
-                                    SendSettingsSaveResultToWebView(true, "设置已保存到 config.toml");
+                                    SendSettingsSaveResultToWebView(true, "设置已保存到程序目录的 config.toml，重启应用后生效");
                                     SendSettingsConfigToWebView();
                                 }
                             }
