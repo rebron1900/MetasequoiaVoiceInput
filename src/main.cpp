@@ -30,6 +30,8 @@
 std::string g_cloud_token;
 std::string g_language = "zh-cn";
 bool g_polish_text = false;
+bool g_notification_sound = true;
+TextOutputMethod g_output_method = TextOutputMethod::SendInput;
 
 namespace
 {

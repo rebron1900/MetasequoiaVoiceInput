@@ -146,7 +146,7 @@ bool JsonWebSocketSttSession::Start(PartialCallback on_partial, std::string *err
     if (!send_info.success)
     {
         Cancel();
-        return SetError("unable to send streaming start event: " + send_info.errorStr, error_message);
+        return SetError("unable to send streaming start event", error_message);
     }
 
     started_ = true;
@@ -172,7 +172,7 @@ bool JsonWebSocketSttSession::PushAudio(const std::vector<float> &samples, std::
     const ix::WebSocketSendInfo send_info = socket_->sendBinary(FloatPcmToPcm16(samples.data(), samples.size()));
     if (!send_info.success)
     {
-        return SetError("unable to send streaming audio: " + send_info.errorStr, error_message);
+        return SetError("unable to send streaming audio", error_message);
     }
     return true;
 }
@@ -194,7 +194,7 @@ std::string JsonWebSocketSttSession::Finish(std::string *error_message)
         const ix::WebSocketSendInfo send_info = socket_->send(nlohmann::json{{"type", "stop"}}.dump());
         if (!send_info.success)
         {
-            SetError("unable to send streaming stop event: " + send_info.errorStr, error_message);
+            SetError("unable to send streaming stop event", error_message);
             return "";
         }
     }
