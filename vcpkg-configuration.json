@@ -1,3 +1,8 @@
 {
-  "default-triplet": "x64-windows-static"
+  "default-triplet": "x64-windows-static",
+  "default-registry": {
+    "kind": "git",
+    "repository": "https://github.com/microsoft/vcpkg",
+    "baseline": "60868ea8e37bffdcc7b50d6838cc558285fe0d0d"
+  }
 }
