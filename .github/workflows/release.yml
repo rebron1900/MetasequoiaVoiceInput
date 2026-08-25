@@ -26,8 +26,10 @@ jobs:
       - name: Set up MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Set up vcpkg
-        uses: lukka/run-vcpkg@v11
+      - name: Install vcpkg dependencies
+        shell: pwsh
+        run: |
+          & "C:\vcpkg\vcpkg.exe" install --triplet x64-windows-static --x-manifest-root . --x-install-root "${{ github.workspace }}\vcpkg_installed"
 
       - name: Configure CMake
         shell: pwsh
