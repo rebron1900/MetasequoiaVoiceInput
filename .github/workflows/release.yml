@@ -45,6 +45,9 @@ jobs:
         shell: pwsh
         run: |
           cmake --install build --config Release --prefix package/MetasequoiaVoiceInput
+          $loader = Get-ChildItem -Path vcpkg_installed -Filter WebView2Loader.dll -Recurse | Select-Object -First 1
+          if ($null -eq $loader) { throw "vcpkg did not provide WebView2Loader.dll" }
+          Copy-Item $loader.FullName "package/MetasequoiaVoiceInput/WebView2Loader.dll"
           $requiredFiles = @(
             "package/MetasequoiaVoiceInput/MetasequoiaVoiceInput.exe",
             "package/MetasequoiaVoiceInput/WebView2Loader.dll",
