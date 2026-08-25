@@ -22,8 +22,7 @@ find_package(CURL CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(tomlplusplus CONFIG REQUIRED)
 find_package(unofficial-webview2 CONFIG REQUIRED)
-find_path(IXWEBSOCKET_INCLUDE_DIR ixwebsocket/IXWebSocket.h REQUIRED)
-find_library(IXWEBSOCKET_LIBRARY ixwebsocket REQUIRED)
+find_package(ixwebsocket CONFIG REQUIRED)
 
 if(NOT DEFINED VCPKG_INSTALLED_DIR)
     set(VCPKG_INSTALLED_DIR "${CMAKE_BINARY_DIR}/vcpkg_installed")
@@ -89,7 +88,7 @@ target_link_libraries(${MY_EXECUTABLE_NAME}
     nlohmann_json::nlohmann_json
     tomlplusplus::tomlplusplus
     unofficial::webview2::webview2
-    ${IXWEBSOCKET_LIBRARY}
+    ixwebsocket::ixwebsocket
     d2d1
     User32
     dwmapi
@@ -100,7 +99,6 @@ target_include_directories(${MY_EXECUTABLE_NAME}
     PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniaudio
-    ${IXWEBSOCKET_INCLUDE_DIR}
     ${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/include
 )
 
