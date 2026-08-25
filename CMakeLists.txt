@@ -21,7 +21,7 @@ find_package(fmt CONFIG REQUIRED)
 find_package(CURL CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(tomlplusplus CONFIG REQUIRED)
-find_package(webview2 CONFIG REQUIRED)
+find_package(unofficial-webview2 CONFIG REQUIRED)
 find_path(IXWEBSOCKET_INCLUDE_DIR ixwebsocket/IXWebSocket.h REQUIRED)
 find_library(IXWEBSOCKET_LIBRARY ixwebsocket REQUIRED)
 
@@ -88,6 +88,7 @@ target_link_libraries(${MY_EXECUTABLE_NAME}
     CURL::libcurl
     nlohmann_json::nlohmann_json
     tomlplusplus::tomlplusplus
+    unofficial::webview2::webview2
     ${IXWEBSOCKET_LIBRARY}
     d2d1
     User32
