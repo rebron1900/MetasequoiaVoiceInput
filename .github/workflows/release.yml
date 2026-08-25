@@ -28,8 +28,6 @@ jobs:
 
       - name: Set up vcpkg
         uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: "ce613c41372b23b1f51333815feb3edd87ef8aeb"
 
       - name: Configure CMake
         shell: pwsh
