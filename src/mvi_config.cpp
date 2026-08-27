@@ -121,7 +121,7 @@ void LoadApiProfiles(const toml::table &table, const char *section, std::map<std
                 if (const auto token = (*profile)["token"]; token.is_string()) config.token = token.value_or("");
                 if (const auto endpoint = (*profile)["endpoint"]; endpoint.is_string()) config.endpoint = endpoint.value_or("");
                 if (const auto model = (*profile)["model"]; model.is_string()) config.model = model.value_or("");
-                profiles[name.str()] = std::move(config);
+                profiles[std::string(name.str())] = std::move(config);
             }
         }
     }
