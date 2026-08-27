@@ -45,8 +45,12 @@ jobs:
         shell: pwsh
         run: |
           cmake --install build --config Release --prefix package/MetasequoiaVoiceInput
-          $loader = Get-ChildItem -Path vcpkg_installed -Filter WebView2Loader.dll -Recurse | Select-Object -First 1
-          if ($null -eq $loader) { throw "vcpkg did not provide WebView2Loader.dll" }
+          $webview2Version = "1.0.3800.47"
+          $webview2Package = "webview2-package.nupkg"
+          Invoke-WebRequest -Uri "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/$webview2Version" -OutFile $webview2Package
+          Expand-Archive -Path $webview2Package -DestinationPath webview2-package -Force
+          $loader = Get-ChildItem -Path webview2-package -Filter WebView2Loader.dll -Recurse | Where-Object { $_.FullName -match "\\build\\native\\x64\\" } | Select-Object -First 1
+          if ($null -eq $loader) { throw "NuGet WebView2 package did not provide the x64 WebView2Loader.dll" }
           Copy-Item $loader.FullName "package/MetasequoiaVoiceInput/WebView2Loader.dll"
           $requiredFiles = @(
             "package/MetasequoiaVoiceInput/MetasequoiaVoiceInput.exe",
