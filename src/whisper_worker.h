@@ -8,7 +8,7 @@ struct whisper_context;
 class WhisperWorker : public SttService
 {
   public:
-    explicit WhisperWorker(const char *model_path);
+    explicit WhisperWorker(const std::string &model_path);
     ~WhisperWorker();
 
     std::string recognize(const std::vector<float> &pcm) override;

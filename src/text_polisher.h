@@ -5,7 +5,7 @@
 class TextPolisher
 {
   public:
-    TextPolisher(std::string api_token, std::string language, std::string api_url);
+    TextPolisher(std::string api_token, std::string language, std::string api_url, std::string model);
     std::string polish(const std::string &original_text) const;
 
   private:

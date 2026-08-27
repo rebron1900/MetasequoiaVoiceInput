@@ -33,6 +33,7 @@
     }
 
     .shell { height: 100vh; display: flex; flex-direction: column; }
+    .body-layout { flex: 1; min-height: 0; display: flex; }
 
     .titlebar {
       min-height: 72px;
@@ -50,40 +51,11 @@
     .brand-caption { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
     .config-path { color: var(--muted); font-size: 12px; text-align: right; }
 
-    .tablist {
-      display: flex;
-      gap: 24px;
-      padding: 0 32px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .tab {
-      position: relative;
-      border: 0;
-      background: transparent;
-      color: var(--subtle);
-      padding: 12px 2px 14px;
-      font: inherit;
-      font-size: 14px;
-      cursor: pointer;
-    }
-
-    .tab::after {
-      content: "";
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: -1px;
-      height: 3px;
-      background: transparent;
-      border-radius: 3px 3px 0 0;
-    }
-
-    .tab:hover { color: var(--text); }
-    .tab[aria-selected="true"] { color: var(--text); }
-    .tab[aria-selected="true"]::after { background: var(--accent); }
-
-    .content { flex: 1; overflow: auto; padding: 28px 32px; }
+    .tablist { flex: 0 0 184px; padding: 18px 12px; border-right: 1px solid var(--border); background: #242424; }
+    .tab { display: block; width: 100%; border: 0; border-radius: 6px; background: transparent; color: var(--subtle); padding: 11px 14px; margin-bottom: 6px; text-align: left; font: inherit; font-size: 14px; cursor: pointer; }
+    .tab:hover { background: var(--surface-hover); color: var(--text); }
+    .tab[aria-selected="true"] { background: rgba(96, 205, 255, 0.15); color: var(--text); font-weight: 600; }
+    .content { flex: 1; min-width: 0; overflow: auto; padding: 28px 32px; }
     .page { display: none; max-width: 900px; }
     .page.active { display: block; }
 
@@ -153,6 +125,7 @@
     .status.ok { color: var(--success); }
     .status.err { color: var(--danger); }
     .actions { display: flex; gap: 8px; }
+    .profile-actions { display: grid; grid-template-columns: minmax(140px, 1fr) auto auto auto; gap: 6px; align-items: center; }
     .button { min-height: 32px; border: 1px solid transparent; border-radius: 4px; padding: 5px 16px; font: inherit; font-size: 14px; cursor: pointer; }
     .button.secondary { background: #3a3a3a; color: var(--text); border-color: var(--border); }
     .button.secondary:hover { background: #454545; }
@@ -169,8 +142,11 @@
       .titlebar, .tablist, .content, .footer { padding-left: 18px; padding-right: 18px; }
       .titlebar { align-items: flex-start; flex-direction: column; gap: 8px; }
       .config-path { text-align: left; }
-      .tablist { gap: 18px; overflow-x: auto; }
+      .body-layout { flex-direction: column; }
+      .tablist { flex: 0 0 auto; display: flex; gap: 6px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 10px 18px; }
+      .tab { flex: 0 0 auto; width: auto; margin-bottom: 0; }
       .field { grid-template-columns: 1fr; gap: 8px; }
+      .profile-actions { grid-template-columns: 1fr 1fr; }
       .footer { align-items: flex-start; flex-direction: column; }
       .actions { width: 100%; justify-content: flex-end; }
     }
@@ -189,23 +165,29 @@
       <div class="config-path">配置文件保存在程序目录的 <code>config.toml</code></div>
     </header>
 
-    <nav class="tablist" role="tablist" aria-label="设置分类">
-      <button class="tab" id="tab-asr" role="tab" aria-selected="true" aria-controls="page-asr" data-page="page-asr">语音识别</button>
-      <button class="tab" id="tab-polish" role="tab" aria-selected="false" aria-controls="page-polish" data-page="page-polish">文本处理</button>
-      <button class="tab" id="tab-general" role="tab" aria-selected="false" aria-controls="page-general" data-page="page-general">常规</button>
-      <button class="tab" id="tab-about" role="tab" aria-selected="false" aria-controls="page-about" data-page="page-about">关于</button>
-    </nav>
+    <div class="body-layout">
+      <nav class="tablist" role="tablist" aria-label="设置分类">
+        <button class="tab" id="tab-asr" role="tab" aria-selected="true" aria-controls="page-asr" data-page="page-asr">语音识别</button>
+        <button class="tab" id="tab-polish" role="tab" aria-selected="false" aria-controls="page-polish" data-page="page-polish">文本处理</button>
+        <button class="tab" id="tab-general" role="tab" aria-selected="false" aria-controls="page-general" data-page="page-general">常规</button>
+        <button class="tab" id="tab-about" role="tab" aria-selected="false" aria-controls="page-about" data-page="page-about">关于</button>
+      </nav>
 
-    <main class="content">
+      <main class="content">
       <section class="page active" id="page-asr" role="tabpanel" aria-labelledby="tab-asr">
         <h2 class="page-title">语音识别</h2>
         <p class="page-description">配置将录音转换为文字的云端服务。</p>
         <div class="settings-card">
           <h3 class="card-title">ASR 服务</h3>
-          <p class="card-description">可选择 HTTP 文件转写，或统一 JSON WebSocket 流式协议。切换传输方式会更新当前 ASR 地址和 Token。</p>
+          <p class="card-description">可以保存多个 ASR 方案，并明确选择当前使用的方案。</p>
+          <div class="field">
+            <div><div class="field-label">编辑方案</div><p class="field-hint">下拉框只切换正在编辑的方案。</p></div>
+            <div class="profile-actions"><select id="asr-profile"></select><button class="button secondary" id="asr-active-btn" type="button">设为当前</button><button class="button secondary" id="asr-add-btn" type="button">新建</button><button class="button secondary" id="asr-delete-btn" type="button">删除</button></div>
+          </div>
           <div class="field">
             <div><div class="field-label">传输方式</div><p class="field-hint">流式模式会在录音结束后将 16 kHz PCM16 音频分帧发送到 WebSocket 服务。</p></div>
             <select id="stt-provider">
+              <option value="local_whisper">本地 Whisper 模型</option>
               <option value="cloud_siliconflow">HTTP 文件转写（SiliconFlow 兼容）</option>
               <option value="json_websocket_streaming">JSON WebSocket 流式 ASR</option>
             </select>
@@ -213,6 +195,10 @@
           <div class="field">
             <div><div class="field-label">API 地址</div><p class="field-hint" id="asr-endpoint-hint">HTTP 模式填写音频转写接口 URL；流式模式填写 ws:// 或 wss:// 服务地址。</p></div>
             <input id="asr-endpoint" type="url" inputmode="url" autocomplete="off" />
+          </div>
+          <div class="field" id="asr-model-field">
+            <div><div class="field-label">模型路径 / 名称</div><p class="field-hint">本地 Whisper 填相对程序目录的 ggml 模型路径；云端填模型名称。</p></div>
+            <input id="asr-model" type="text" autocomplete="off" />
           </div>
           <div class="field" id="streaming-chunk-field" hidden>
             <div><div class="field-label">音频分片</div><p class="field-hint">每个 WebSocket binary frame 的音频时长，建议 40 ms。</p></div>
@@ -231,7 +217,11 @@
         <p class="page-description">在上屏前清理明显的停顿词和重复内容。</p>
         <div class="settings-card">
           <h3 class="card-title">文本润色服务</h3>
-          <p class="card-description">关闭“上屏前文本处理”后，下列接口不会被调用。</p>
+          <p class="card-description">可以保存多个文本处理方案，并明确选择当前使用的方案。</p>
+          <div class="field">
+            <div><div class="field-label">编辑方案</div><p class="field-hint">下拉框只切换正在编辑的方案。</p></div>
+            <div class="profile-actions"><select id="polish-profile"></select><button class="button secondary" id="polish-active-btn" type="button">设为当前</button><button class="button secondary" id="polish-add-btn" type="button">新建</button><button class="button secondary" id="polish-delete-btn" type="button">删除</button></div>
+          </div>
           <div class="field">
             <div><div class="field-label">服务提供方</div><p class="field-hint">用于记录配置来源。</p></div>
             <input id="polish-provider" type="text" autocomplete="off" />
@@ -271,6 +261,10 @@
             <div class="switch-copy"><div class="switch-title">提示音</div><p class="switch-hint">录音开始和停止时播放提示音。</p></div>
             <label class="switch"><input id="notification-sound" type="checkbox" /><span class="switch-track"></span></label>
           </div>
+          <div class="switch-row">
+            <div class="switch-copy"><div class="switch-title">调试日志</div><p class="switch-hint">写入程序目录 logs/metasequoia-voice-input.log，并同步输出到调试器。</p></div>
+            <label class="switch"><input id="debug-logging" type="checkbox" /><span class="switch-track"></span></label>
+          </div>
         </div>
         <div class="notice"><strong>提示</strong><span>设置保存后需重启水杉记言，新的服务配置和行为选项才会应用到当前运行实例。</span></div>
       </section>
@@ -287,7 +281,8 @@
           </dl>
         </div>
       </section>
-    </main>
+      </main>
+    </div>
 
     <footer class="footer">
       <div class="status" id="status" role="status" aria-live="polite">正在加载配置...</div>
@@ -300,9 +295,11 @@
 
   <script>
     const defaultConfig = {
-      asr_api: { provider: "siliconflow", token: "", endpoint: "https://api.siliconflow.cn/v1/audio/transcriptions" },
-      polish_api: { provider: "siliconflow", token: "", endpoint: "https://api.siliconflow.cn/v1/chat/completions" },
-      settings: { language: "zh-cn", polish_text: false, notification_sound: true, stt_provider: "cloud_siliconflow", output_method: "send_input", streaming_chunk_ms: 40 }
+      asr_api: { provider: "cloud_siliconflow", token: "", endpoint: "https://api.siliconflow.cn/v1/audio/transcriptions", model: "TeleAI/TeleSpeechASR" },
+      polish_api: { provider: "siliconflow", token: "", endpoint: "https://api.siliconflow.cn/v1/chat/completions", model: "Qwen/Qwen3-8B" },
+      asr_profiles: { default: { provider: "cloud_siliconflow", token: "", endpoint: "https://api.siliconflow.cn/v1/audio/transcriptions", model: "TeleAI/TeleSpeechASR" } },
+      polish_profiles: { default: { provider: "siliconflow", token: "", endpoint: "https://api.siliconflow.cn/v1/chat/completions", model: "Qwen/Qwen3-8B" } },
+      settings: { active_asr_profile: "default", active_polish_profile: "default", language: "zh-cn", polish_text: false, notification_sound: true, debug_logging: true, log_file: "logs/metasequoia-voice-input.log", stt_provider: "cloud_siliconflow", output_method: "send_input", streaming_chunk_ms: 40 }
     };
 
     const $ = (id) => document.getElementById(id);
@@ -313,87 +310,139 @@
       status.className = `status ${kind}`.trim();
     }
 
-    function mergedConfig(config) {
-      const safe = config && typeof config === "object" ? config : {};
-      const asr = safe.asr_api && typeof safe.asr_api === "object" ? safe.asr_api : {};
-      const polish = safe.polish_api && typeof safe.polish_api === "object" ? safe.polish_api : {};
-      const settings = safe.settings && typeof safe.settings === "object" ? safe.settings : {};
-      return {
-        asr_api: { provider: typeof asr.provider === "string" ? asr.provider : defaultConfig.asr_api.provider, token: typeof asr.token === "string" ? asr.token : defaultConfig.asr_api.token, endpoint: typeof asr.endpoint === "string" ? asr.endpoint : defaultConfig.asr_api.endpoint },
-        polish_api: { provider: typeof polish.provider === "string" ? polish.provider : defaultConfig.polish_api.provider, token: typeof polish.token === "string" ? polish.token : defaultConfig.polish_api.token, endpoint: typeof polish.endpoint === "string" ? polish.endpoint : defaultConfig.polish_api.endpoint },
-        settings: { language: typeof settings.language === "string" ? settings.language : defaultConfig.settings.language, polish_text: typeof settings.polish_text === "boolean" ? settings.polish_text : defaultConfig.settings.polish_text, notification_sound: typeof settings.notification_sound === "boolean" ? settings.notification_sound : defaultConfig.settings.notification_sound, stt_provider: settings.stt_provider === "json_websocket_streaming" ? "json_websocket_streaming" : "cloud_siliconflow", output_method: settings.output_method === "clipboard_paste" ? "clipboard_paste" : "send_input", streaming_chunk_ms: [20, 40, 60, 100, 200].includes(settings.streaming_chunk_ms) ? settings.streaming_chunk_ms : 40 }
-      };
+    let state = null;
+    let asrEditing = "default";
+    let polishEditing = "default";
+
+    function normalizeProfile(profile, fallback) {
+      const value = profile && typeof profile === "object" ? profile : {};
+      return { provider: typeof value.provider === "string" ? value.provider : fallback.provider, token: typeof value.token === "string" ? value.token : "", endpoint: typeof value.endpoint === "string" ? value.endpoint : fallback.endpoint, model: typeof value.model === "string" ? value.model : fallback.model };
     }
 
-    function applyConfig(config) {
-      const value = mergedConfig(config);
-      $("asr-endpoint").value = value.asr_api.endpoint;
-      $("asr-token").value = value.asr_api.token;
-      $("stt-provider").value = value.settings.stt_provider;
-      $("streaming-chunk-ms").value = String(value.settings.streaming_chunk_ms);
+    function mergedConfig(config) {
+      const safe = config && typeof config === "object" ? config : {};
+      const settings = safe.settings && typeof safe.settings === "object" ? safe.settings : {};
+      const asrFallback = normalizeProfile(safe.asr_api, defaultConfig.asr_api);
+      const polishFallback = normalizeProfile(safe.polish_api, defaultConfig.polish_api);
+      const asrProfiles = safe.asr_profiles && typeof safe.asr_profiles === "object" ? safe.asr_profiles : { default: asrFallback };
+      const polishProfiles = safe.polish_profiles && typeof safe.polish_profiles === "object" ? safe.polish_profiles : { default: polishFallback };
+      const normalizedAsr = Object.fromEntries(Object.entries(asrProfiles).map(([name, profile]) => [name, normalizeProfile(profile, asrFallback)]));
+      const normalizedPolish = Object.fromEntries(Object.entries(polishProfiles).map(([name, profile]) => [name, normalizeProfile(profile, polishFallback)]));
+      if (!Object.keys(normalizedAsr).length) normalizedAsr.default = asrFallback;
+      if (!Object.keys(normalizedPolish).length) normalizedPolish.default = polishFallback;
+      return { asr_api: asrFallback, polish_api: polishFallback, asr_profiles: normalizedAsr, polish_profiles: normalizedPolish, settings: { active_asr_profile: typeof settings.active_asr_profile === "string" && normalizedAsr[settings.active_asr_profile] ? settings.active_asr_profile : Object.keys(normalizedAsr)[0], active_polish_profile: typeof settings.active_polish_profile === "string" && normalizedPolish[settings.active_polish_profile] ? settings.active_polish_profile : Object.keys(normalizedPolish)[0], language: typeof settings.language === "string" ? settings.language : defaultConfig.settings.language, polish_text: typeof settings.polish_text === "boolean" ? settings.polish_text : false, notification_sound: typeof settings.notification_sound === "boolean" ? settings.notification_sound : true, debug_logging: typeof settings.debug_logging === "boolean" ? settings.debug_logging : true, log_file: typeof settings.log_file === "string" ? settings.log_file : defaultConfig.settings.log_file, output_method: settings.output_method === "clipboard_paste" ? "clipboard_paste" : "send_input", streaming_chunk_ms: [20, 40, 60, 100, 200].includes(settings.streaming_chunk_ms) ? settings.streaming_chunk_ms : 40 } };
+    }
+
+    function renderProfileLists() {
+      const asrSelect = $("asr-profile");
+      const polishSelect = $("polish-profile");
+      asrSelect.innerHTML = Object.keys(state.asr_profiles).map((name) => `<option value="${name}">${name}${name === state.settings.active_asr_profile ? "（使用中）" : ""}</option>`).join("");
+      polishSelect.innerHTML = Object.keys(state.polish_profiles).map((name) => `<option value="${name}">${name}${name === state.settings.active_polish_profile ? "（使用中）" : ""}</option>`).join("");
+      asrSelect.value = asrEditing;
+      polishSelect.value = polishEditing;
+    }
+
+    function renderFields() {
+      const asr = state.asr_profiles[asrEditing];
+      const polish = state.polish_profiles[polishEditing];
+      $("stt-provider").value = asr.provider;
+      $("asr-endpoint").value = asr.endpoint;
+      $("asr-token").value = asr.token;
+      $("asr-model").value = asr.model;
+      $("polish-provider").value = polish.provider;
+      $("polish-endpoint").value = polish.endpoint;
+      $("polish-token").value = polish.token;
+      $("language").value = state.settings.language;
+      $("output-method").value = state.settings.output_method;
+      $("polish-text").checked = state.settings.polish_text;
+      $("notification-sound").checked = state.settings.notification_sound;
+      $("debug-logging").checked = state.settings.debug_logging;
       updateStreamingControls();
       validateAsrEndpoint();
-      $("polish-provider").value = value.polish_api.provider;
-      $("polish-endpoint").value = value.polish_api.endpoint;
-      $("polish-token").value = value.polish_api.token;
-      $("language").value = value.settings.language;
-      $("output-method").value = value.settings.output_method;
-      $("polish-text").checked = value.settings.polish_text;
-      $("notification-sound").checked = value.settings.notification_sound;
+      renderProfileLists();
+    }
+
+    function updateCurrentProfiles() {
+      const asr = state.asr_profiles[asrEditing];
+      Object.assign(asr, { provider: $("stt-provider").value, endpoint: $("asr-endpoint").value, token: $("asr-token").value, model: $("asr-model").value });
+      const polish = state.polish_profiles[polishEditing];
+      Object.assign(polish, { provider: $("polish-provider").value, endpoint: $("polish-endpoint").value, token: $("polish-token").value });
+      state.settings.language = $("language").value;
+      state.settings.output_method = $("output-method").value;
+      state.settings.polish_text = $("polish-text").checked;
+      state.settings.notification_sound = $("notification-sound").checked;
+      state.settings.debug_logging = $("debug-logging").checked;
     }
 
     function updateStreamingControls() {
-      const streaming = $("stt-provider").value === "json_websocket_streaming";
+      const provider = $("stt-provider").value;
+      const streaming = provider === "json_websocket_streaming";
+      const local = provider === "local_whisper";
       $("streaming-chunk-field").hidden = !streaming;
       $("streaming-protocol-notice").hidden = !streaming;
-      $("asr-endpoint-hint").textContent = streaming
-        ? "填写 ws:// 或 wss:// 流式服务地址。服务必须实现本页所述 JSON WebSocket 协议。"
-        : "填写 OpenAI 兼容音频转写接口的完整 HTTPS URL。";
+      $("asr-endpoint").disabled = local;
+      $("asr-endpoint-hint").textContent = local ? "本地模式不使用 API 地址。" : streaming ? "填写 ws:// 或 wss:// 流式服务地址。" : "填写 OpenAI 兼容音频转写接口的完整 HTTPS URL。";
     }
 
     function validateAsrEndpoint() {
       const endpoint = $("asr-endpoint").value;
-      const streaming = $("stt-provider").value === "json_websocket_streaming";
+      const provider = $("stt-provider").value;
+      if (provider === "local_whisper") { $("asr-endpoint").setCustomValidity(""); return true; }
+      const streaming = provider === "json_websocket_streaming";
       const localWs = /^ws:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i;
-      const valid = streaming
-        ? /^wss:\/\//i.test(endpoint) || localWs.test(endpoint)
-        : /^https:\/\//i.test(endpoint) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i.test(endpoint);
-      $("asr-endpoint").setCustomValidity(valid ? "" : streaming ? "请输入 wss:// 地址，或 localhost 的 ws:// 地址。" : "请输入 HTTPS 地址，或 localhost 的 HTTP 地址。");
+      const valid = streaming ? /^wss:\/\//i.test(endpoint) || localWs.test(endpoint) : /^https:\/\//i.test(endpoint) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i.test(endpoint);
+      $("asr-endpoint").setCustomValidity(valid ? "" : "请输入有效的服务地址。");
       return valid;
     }
 
     function readConfig() {
-      validateAsrEndpoint();
-      return {
-        asr_api: { provider: $("stt-provider").value, endpoint: $("asr-endpoint").value.trim(), token: $("asr-token").value },
-        polish_api: { provider: $("polish-provider").value.trim(), endpoint: $("polish-endpoint").value.trim(), token: $("polish-token").value },
-        settings: { language: $("language").value, output_method: $("output-method").value, polish_text: $("polish-text").checked, notification_sound: $("notification-sound").checked, stt_provider: $("stt-provider").value, streaming_chunk_ms: Number($("streaming-chunk-ms").value) }
-      };
+      updateCurrentProfiles();
+      const activeAsr = state.asr_profiles[state.settings.active_asr_profile];
+      const activePolish = state.polish_profiles[state.settings.active_polish_profile];
+      return { ...state, asr_api: activeAsr, polish_api: activePolish, settings: { ...state.settings, stt_provider: activeAsr.provider, streaming_chunk_ms: Number($("streaming-chunk-ms").value) } };
     }
 
-    $("stt-provider").addEventListener("change", () => { updateStreamingControls(); validateAsrEndpoint(); });
+    function createProfile(kind) {
+      const profiles = kind === "asr" ? state.asr_profiles : state.polish_profiles;
+      const base = profiles[kind === "asr" ? asrEditing : polishEditing];
+      const name = window.prompt("请输入方案名称", `${kind}-new`);
+      if (!name || profiles[name]) return;
+      profiles[name] = { ...base };
+      if (kind === "asr") asrEditing = name; else polishEditing = name;
+      renderFields();
+    }
+
+    function deleteProfile(kind) {
+      const profiles = kind === "asr" ? state.asr_profiles : state.polish_profiles;
+      const editing = kind === "asr" ? asrEditing : polishEditing;
+      if (Object.keys(profiles).length <= 1) { setStatus("至少保留一个方案。", "err"); return; }
+      delete profiles[editing];
+      if (kind === "asr") { asrEditing = Object.keys(profiles)[0]; if (state.settings.active_asr_profile === editing) state.settings.active_asr_profile = asrEditing; }
+      else { polishEditing = Object.keys(profiles)[0]; if (state.settings.active_polish_profile === editing) state.settings.active_polish_profile = polishEditing; }
+      renderFields();
+    }
+
+    function applyConfig(config) {
+      state = mergedConfig(config);
+      asrEditing = state.settings.active_asr_profile;
+      polishEditing = state.settings.active_polish_profile;
+      $("streaming-chunk-ms").value = String(state.settings.streaming_chunk_ms);
+      renderFields();
+    }
+
+    $("asr-profile").addEventListener("change", () => { updateCurrentProfiles(); asrEditing = $("asr-profile").value; renderFields(); });
+    $("polish-profile").addEventListener("change", () => { updateCurrentProfiles(); polishEditing = $("polish-profile").value; renderFields(); });
+    $("asr-active-btn").addEventListener("click", () => { updateCurrentProfiles(); state.settings.active_asr_profile = asrEditing; renderProfileLists(); setStatus("ASR 当前方案已更新。", "ok"); });
+    $("polish-active-btn").addEventListener("click", () => { updateCurrentProfiles(); state.settings.active_polish_profile = polishEditing; renderProfileLists(); setStatus("文本处理当前方案已更新。", "ok"); });
+    $("asr-add-btn").addEventListener("click", () => createProfile("asr"));
+    $("polish-add-btn").addEventListener("click", () => createProfile("polish"));
+    $("asr-delete-btn").addEventListener("click", () => deleteProfile("asr"));
+    $("polish-delete-btn").addEventListener("click", () => deleteProfile("polish"));
+    $("stt-provider").addEventListener("change", () => { updateCurrentProfiles(); updateStreamingControls(); validateAsrEndpoint(); });
     $("asr-endpoint").addEventListener("input", validateAsrEndpoint);
     const tabs = Array.from(document.querySelectorAll(".tab"));
-
-    function activateTab(tab, focus = false) {
-      tabs.forEach((item) => item.setAttribute("aria-selected", String(item === tab)));
-      document.querySelectorAll(".page").forEach((page) => page.classList.toggle("active", page.id === tab.dataset.page));
-      if (focus) { tab.focus(); }
-    }
-
-    tabs.forEach((tab, index) => {
-      tab.addEventListener("click", () => activateTab(tab));
-      tab.addEventListener("keydown", (event) => {
-        let targetIndex = index;
-        if (event.key === "ArrowRight") { targetIndex = (index + 1) % tabs.length; }
-        else if (event.key === "ArrowLeft") { targetIndex = (index - 1 + tabs.length) % tabs.length; }
-        else if (event.key === "Home") { targetIndex = 0; }
-        else if (event.key === "End") { targetIndex = tabs.length - 1; }
-        else { return; }
-        event.preventDefault();
-        activateTab(tabs[targetIndex], true);
-      });
-    });
+    function activateTab(tab, focus = false) { tabs.forEach((item) => item.setAttribute("aria-selected", String(item === tab))); document.querySelectorAll(".page").forEach((page) => page.classList.toggle("active", page.id === tab.dataset.page)); if (focus) tab.focus(); }
+    tabs.forEach((tab, index) => { tab.addEventListener("click", () => activateTab(tab)); tab.addEventListener("keydown", (event) => { let targetIndex = index; if (event.key === "ArrowDown" || event.key === "ArrowRight") targetIndex = (index + 1) % tabs.length; else if (event.key === "ArrowUp" || event.key === "ArrowLeft") targetIndex = (index - 1 + tabs.length) % tabs.length; else if (event.key === "Home") targetIndex = 0; else if (event.key === "End") targetIndex = tabs.length - 1; else return; event.preventDefault(); activateTab(tabs[targetIndex], true); }); });
     $("save-btn").addEventListener("click", () => {
       if (!validateAsrEndpoint() || !$("asr-endpoint").reportValidity()) { return; }
       if (!window.chrome?.webview) { setStatus("当前不在应用宿主环境，无法保存配置。", "err"); return; }

@@ -2,6 +2,7 @@
 // Voice Activity Detector
 //
 #include "vad.h"
+#include "mvi_logger.h"
 #include <cmath>
 
 static constexpr float RMS_THRESHOLD = 0.01f;     // 声音能量阈值
@@ -20,6 +21,7 @@ bool VadSegmenter::process(const float *samples, size_t count)
         if (!active_) // 如果之前是静音
         {
             active_ = true;
+            mvi_logger::Write("VAD", "speech started");
             // Flush pre-roll buffer into main buffer
             buffer_.insert(buffer_.end(), pre_roll_buffer_.begin(), pre_roll_buffer_.end());
             pre_roll_buffer_.clear();

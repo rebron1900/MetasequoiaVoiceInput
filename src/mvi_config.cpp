@@ -17,10 +17,14 @@ thread_local std::string g_last_load_error;
 mvi_config::RuntimeConfig DefaultConfig()
 {
     mvi_config::RuntimeConfig config;
-    config.asr.provider = "siliconflow";
+    config.asr.provider = "cloud_siliconflow";
     config.asr.endpoint = "https://api.siliconflow.cn/v1/audio/transcriptions";
+    config.asr.model = "TeleAI/TeleSpeechASR";
     config.polish.provider = "siliconflow";
     config.polish.endpoint = "https://api.siliconflow.cn/v1/chat/completions";
+    config.polish.model = "Qwen/Qwen3-8B";
+    config.asr_profiles.emplace("default", config.asr);
+    config.polish_profiles.emplace("default", config.polish);
     return config;
 }
 
@@ -98,6 +102,34 @@ void LoadApiConfig(const toml::table &table, const char *section, mvi_config::Ap
     {
         config.endpoint = endpoint.value_or(config.endpoint);
     }
+    if (const auto model = table[section]["model"]; model.is_string())
+    {
+        config.model = model.value_or(config.model);
+    }
+}
+
+void LoadApiProfiles(const toml::table &table, const char *section, std::map<std::string, mvi_config::ApiConfig> &profiles)
+{
+    if (const auto *profiles_table = table[section].as_table())
+    {
+        for (const auto &[name, value] : *profiles_table)
+        {
+            if (const auto *profile = value.as_table())
+            {
+                mvi_config::ApiConfig config;
+                if (const auto provider = (*profile)["provider"]; provider.is_string()) config.provider = provider.value_or("");
+                if (const auto token = (*profile)["token"]; token.is_string()) config.token = token.value_or("");
+                if (const auto endpoint = (*profile)["endpoint"]; endpoint.is_string()) config.endpoint = endpoint.value_or("");
+                if (const auto model = (*profile)["model"]; model.is_string()) config.model = model.value_or("");
+                profiles[name.str()] = std::move(config);
+            }
+        }
+    }
+}
+
+ toml::table ApiConfigTable(const mvi_config::ApiConfig &config)
+{
+    return toml::table{{"provider", config.provider}, {"token", config.token}, {"endpoint", config.endpoint}, {"model", config.model}};
 }
 
 void AssignStringIfPresent(const nlohmann::json &object, const char *key, std::string &target)
@@ -113,6 +145,21 @@ void AssignBoolIfPresent(const nlohmann::json &object, const char *key, bool &ta
     if (object.contains(key) && object[key].is_boolean())
     {
         target = object[key].get<bool>();
+    }
+}
+
+void AssignApiProfilesIfPresent(const nlohmann::json &object, std::map<std::string, mvi_config::ApiConfig> &profiles)
+{
+    if (!object.is_object()) return;
+    for (const auto &[name, value] : object.items())
+    {
+        if (!value.is_object()) continue;
+        mvi_config::ApiConfig profile;
+        AssignStringIfPresent(value, "provider", profile.provider);
+        AssignStringIfPresent(value, "token", profile.token);
+        AssignStringIfPresent(value, "endpoint", profile.endpoint);
+        AssignStringIfPresent(value, "model", profile.model);
+        profiles[name] = std::move(profile);
     }
 }
 
@@ -137,6 +184,15 @@ bool IsSafeStreamingEndpoint(const std::string &endpoint)
 
 bool ValidateEndpoints(const mvi_config::RuntimeConfig &config, std::string *error_message)
 {
+    if (config.stt_provider == "local_whisper")
+    {
+        if (config.asr.model.empty())
+        {
+            if (error_message != nullptr) *error_message = "本地 Whisper 模型路径不能为空";
+            return false;
+        }
+        return !config.polish_text || IsSafeEndpoint(config.polish.endpoint);
+    }
     if (config.stt_provider == "json_websocket_streaming")
     {
         if (!IsSafeStreamingEndpoint(config.asr.endpoint))
@@ -170,9 +226,15 @@ bool ValidateEndpoints(const mvi_config::RuntimeConfig &config, std::string *err
 toml::table ToToml(const mvi_config::RuntimeConfig &config)
 {
     toml::table table;
-    table.insert_or_assign("asr_api", toml::table{{"provider", config.asr.provider}, {"token", config.asr.token}, {"endpoint", config.asr.endpoint}});
-    table.insert_or_assign("polish_api", toml::table{{"provider", config.polish.provider}, {"token", config.polish.token}, {"endpoint", config.polish.endpoint}});
-    table.insert_or_assign("settings", toml::table{{"language", config.language}, {"polish_text", config.polish_text}, {"notification_sound", config.notification_sound}, {"stt_provider", config.stt_provider}, {"output_method", config.output_method}, {"streaming_chunk_ms", config.streaming_chunk_ms}});
+    table.insert_or_assign("asr_api", ApiConfigTable(config.asr));
+    table.insert_or_assign("polish_api", ApiConfigTable(config.polish));
+    toml::table asr_profiles;
+    for (const auto &[name, profile] : config.asr_profiles) asr_profiles.insert_or_assign(name, ApiConfigTable(profile));
+    toml::table polish_profiles;
+    for (const auto &[name, profile] : config.polish_profiles) polish_profiles.insert_or_assign(name, ApiConfigTable(profile));
+    table.insert_or_assign("asr_profiles", std::move(asr_profiles));
+    table.insert_or_assign("polish_profiles", std::move(polish_profiles));
+    table.insert_or_assign("settings", toml::table{{"active_asr_profile", config.active_asr_profile}, {"active_polish_profile", config.active_polish_profile}, {"language", config.language}, {"polish_text", config.polish_text}, {"notification_sound", config.notification_sound}, {"debug_logging", config.debug_logging}, {"log_file", config.log_file}, {"stt_provider", config.stt_provider}, {"output_method", config.output_method}, {"streaming_chunk_ms", config.streaming_chunk_ms}});
     return table;
 }
 } // namespace
@@ -212,7 +274,27 @@ mvi_config::RuntimeConfig mvi_config::LoadRuntimeConfig()
         const toml::table table = toml::parse_file(config_path);
         LoadApiConfig(table, "asr_api", config.asr);
         LoadApiConfig(table, "polish_api", config.polish);
+        config.asr_profiles["default"] = config.asr;
+        config.polish_profiles["default"] = config.polish;
+        LoadApiProfiles(table, "asr_profiles", config.asr_profiles);
+        LoadApiProfiles(table, "polish_profiles", config.polish_profiles);
 
+        if (const auto active_asr_profile = table["settings"]["active_asr_profile"]; active_asr_profile.is_string())
+        {
+            config.active_asr_profile = active_asr_profile.value_or(config.active_asr_profile);
+        }
+        if (const auto active_polish_profile = table["settings"]["active_polish_profile"]; active_polish_profile.is_string())
+        {
+            config.active_polish_profile = active_polish_profile.value_or(config.active_polish_profile);
+        }
+        if (const auto debug_logging = table["settings"]["debug_logging"]; debug_logging.is_boolean())
+        {
+            config.debug_logging = debug_logging.value_or(config.debug_logging);
+        }
+        if (const auto log_file = table["settings"]["log_file"]; log_file.is_string())
+        {
+            config.log_file = log_file.value_or(config.log_file);
+        }
         if (const auto language = table["settings"]["language"]; language.is_string())
         {
             config.language = language.value_or(config.language);
@@ -237,6 +319,20 @@ mvi_config::RuntimeConfig mvi_config::LoadRuntimeConfig()
         {
             config.streaming_chunk_ms = streaming_chunk_ms.value_or(config.streaming_chunk_ms);
         }
+        if (!table["asr_profiles"].is_table())
+        {
+            config.asr.provider = config.stt_provider;
+            config.asr_profiles["default"] = config.asr;
+        }
+        if (const auto active = config.asr_profiles.find(config.active_asr_profile); active != config.asr_profiles.end())
+        {
+            config.asr = active->second;
+            if (table["asr_profiles"].is_table() && (config.asr.provider == "local_whisper" || config.asr.provider == "cloud_siliconflow" || config.asr.provider == "json_websocket_streaming"))
+            {
+                config.stt_provider = config.asr.provider;
+            }
+        }
+        if (const auto active = config.polish_profiles.find(config.active_polish_profile); active != config.polish_profiles.end()) config.polish = active->second;
     }
     catch (const std::exception &e)
     {
@@ -244,7 +340,7 @@ mvi_config::RuntimeConfig mvi_config::LoadRuntimeConfig()
         return config;
     }
 
-    if (config.stt_provider != "cloud_siliconflow" && config.stt_provider != "json_websocket_streaming")
+    if (config.stt_provider != "cloud_siliconflow" && config.stt_provider != "json_websocket_streaming" && config.stt_provider != "local_whisper")
     {
         g_last_load_error = "未知的 ASR 服务类型";
         return DefaultConfig();
@@ -285,10 +381,16 @@ bool mvi_config::IsSafeStreamingEndpoint(const std::string &endpoint)
 std::string mvi_config::ReadConfigAsJson()
 {
     const RuntimeConfig config = LoadRuntimeConfig();
+    nlohmann::json asr_profiles = nlohmann::json::object();
+    for (const auto &[name, profile] : config.asr_profiles) asr_profiles[name] = {{"provider", profile.provider}, {"token", profile.token}, {"endpoint", profile.endpoint}, {"model", profile.model}};
+    nlohmann::json polish_profiles = nlohmann::json::object();
+    for (const auto &[name, profile] : config.polish_profiles) polish_profiles[name] = {{"provider", profile.provider}, {"token", profile.token}, {"endpoint", profile.endpoint}, {"model", profile.model}};
     const nlohmann::json root = {
-        {"asr_api", {{"provider", config.asr.provider}, {"token", config.asr.token}, {"endpoint", config.asr.endpoint}}},
-        {"polish_api", {{"provider", config.polish.provider}, {"token", config.polish.token}, {"endpoint", config.polish.endpoint}}},
-        {"settings", {{"language", config.language}, {"polish_text", config.polish_text}, {"notification_sound", config.notification_sound}, {"stt_provider", config.stt_provider}, {"output_method", config.output_method}, {"streaming_chunk_ms", config.streaming_chunk_ms}}},
+        {"asr_api", {{"provider", config.asr.provider}, {"token", config.asr.token}, {"endpoint", config.asr.endpoint}, {"model", config.asr.model}}},
+        {"polish_api", {{"provider", config.polish.provider}, {"token", config.polish.token}, {"endpoint", config.polish.endpoint}, {"model", config.polish.model}}},
+        {"asr_profiles", asr_profiles},
+        {"polish_profiles", polish_profiles},
+        {"settings", {{"active_asr_profile", config.active_asr_profile}, {"active_polish_profile", config.active_polish_profile}, {"language", config.language}, {"polish_text", config.polish_text}, {"notification_sound", config.notification_sound}, {"debug_logging", config.debug_logging}, {"log_file", config.log_file}, {"stt_provider", config.stt_provider}, {"output_method", config.output_method}, {"streaming_chunk_ms", config.streaming_chunk_ms}}},
     };
     return root.dump();
 }
@@ -331,6 +433,8 @@ bool mvi_config::WriteConfigFromJson(const std::string &config_json, std::string
         AssignStringIfPresent(asr, "provider", config.asr.provider);
         AssignStringIfPresent(asr, "token", config.asr.token);
         AssignStringIfPresent(asr, "endpoint", config.asr.endpoint);
+        AssignStringIfPresent(asr, "model", config.asr.model);
+        config.asr_profiles[config.active_asr_profile] = config.asr;
     }
     if (root.contains("polish_api") && root["polish_api"].is_object())
     {
@@ -338,13 +442,21 @@ bool mvi_config::WriteConfigFromJson(const std::string &config_json, std::string
         AssignStringIfPresent(polish, "provider", config.polish.provider);
         AssignStringIfPresent(polish, "token", config.polish.token);
         AssignStringIfPresent(polish, "endpoint", config.polish.endpoint);
+        AssignStringIfPresent(polish, "model", config.polish.model);
+        config.polish_profiles[config.active_polish_profile] = config.polish;
     }
+    if (root.contains("asr_profiles")) AssignApiProfilesIfPresent(root["asr_profiles"], config.asr_profiles);
+    if (root.contains("polish_profiles")) AssignApiProfilesIfPresent(root["polish_profiles"], config.polish_profiles);
     if (root.contains("settings") && root["settings"].is_object())
     {
         const nlohmann::json &settings = root["settings"];
         AssignStringIfPresent(settings, "language", config.language);
         AssignBoolIfPresent(settings, "polish_text", config.polish_text);
         AssignBoolIfPresent(settings, "notification_sound", config.notification_sound);
+        AssignBoolIfPresent(settings, "debug_logging", config.debug_logging);
+        AssignStringIfPresent(settings, "log_file", config.log_file);
+        AssignStringIfPresent(settings, "active_asr_profile", config.active_asr_profile);
+        AssignStringIfPresent(settings, "active_polish_profile", config.active_polish_profile);
         AssignStringIfPresent(settings, "stt_provider", config.stt_provider);
         AssignStringIfPresent(settings, "output_method", config.output_method);
         if (settings.contains("streaming_chunk_ms") && settings["streaming_chunk_ms"].is_number_integer())
@@ -353,13 +465,20 @@ bool mvi_config::WriteConfigFromJson(const std::string &config_json, std::string
         }
     }
 
+    if (const auto active = config.asr_profiles.find(config.active_asr_profile); active != config.asr_profiles.end())
+    {
+        config.asr = active->second;
+        if (config.asr.provider == "local_whisper" || config.asr.provider == "cloud_siliconflow" || config.asr.provider == "json_websocket_streaming") config.stt_provider = config.asr.provider;
+    }
+    if (const auto active = config.polish_profiles.find(config.active_polish_profile); active != config.polish_profiles.end()) config.polish = active->second;
+
     if (config.output_method != "send_input" && config.output_method != "clipboard_paste")
     {
         set_error("未知的上屏方式");
         return false;
     }
 
-    if (config.stt_provider != "cloud_siliconflow" && config.stt_provider != "json_websocket_streaming")
+    if (config.stt_provider != "cloud_siliconflow" && config.stt_provider != "json_websocket_streaming" && config.stt_provider != "local_whisper")
     {
         set_error("未知的 ASR 服务类型");
         return false;

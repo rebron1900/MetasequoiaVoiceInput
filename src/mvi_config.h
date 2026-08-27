@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <string>
 
 namespace mvi_config
@@ -9,15 +10,22 @@ struct ApiConfig
     std::string provider;
     std::string token;
     std::string endpoint;
+    std::string model;
 };
 
 struct RuntimeConfig
 {
     ApiConfig asr;
     ApiConfig polish;
+    std::map<std::string, ApiConfig> asr_profiles;
+    std::map<std::string, ApiConfig> polish_profiles;
+    std::string active_asr_profile = "default";
+    std::string active_polish_profile = "default";
     std::string language = "zh-cn";
     bool polish_text = false;
     bool notification_sound = true;
+    bool debug_logging = true;
+    std::string log_file = "logs/metasequoia-voice-input.log";
     std::string stt_provider = "cloud_siliconflow";
     std::string output_method = "send_input";
     int streaming_chunk_ms = 40;

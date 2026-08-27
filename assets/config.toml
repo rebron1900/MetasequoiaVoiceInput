@@ -1,23 +1,42 @@
-# 自动语音识别（ASR）配置
+# 兼容旧版本的镜像配置；新版本请使用下方 profiles。
 [asr_api]
-# API 基础地址
 endpoint = "https://api.siliconflow.cn/v1/audio/transcriptions"
-# 服务提供商（如：azure、openai、deepgram 等）
-provider = "siliconflow"
-# API access token. Leave empty until configured in the settings window.
+provider = "cloud_siliconflow"
 token = ""
+model = "TeleAI/TeleSpeechASR"
 
-# 文本润色配置
 [polish_api]
-# API 基础地址
 endpoint = "https://api.siliconflow.cn/v1/chat/completions"
-# 服务提供商（如：azure、openai、deepgram 等）
 provider = "siliconflow"
-# API access token. Leave empty until configured in the settings window.
 token = ""
+model = "Qwen/Qwen3-8B"
+
+[asr_profiles.default]
+provider = "cloud_siliconflow"
+endpoint = "https://api.siliconflow.cn/v1/audio/transcriptions"
+token = ""
+model = "TeleAI/TeleSpeechASR"
+
+# 本地 Whisper 示例：将 provider 改为 local_whisper，model 填 ggml 模型相对程序目录的路径。
+# [asr_profiles.local-whisper]
+# provider = "local_whisper"
+# endpoint = ""
+# token = ""
+# model = "models/ggml-base.bin"
+
+[polish_profiles.default]
+provider = "siliconflow"
+endpoint = "https://api.siliconflow.cn/v1/chat/completions"
+token = ""
+model = "Qwen/Qwen3-8B"
 
 # 基础设置
 [settings]
+active_asr_profile = "default"
+active_polish_profile = "default"
+# 开发阶段建议开启，日志写入程序目录 logs/。
+debug_logging = true
+log_file = "logs/metasequoia-voice-input.log"
 # 偏好语言
 language = "zh-cn"
 # 触发时是否播放提示音

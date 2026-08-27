@@ -21,7 +21,7 @@ size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
 }
 } // namespace
 
-TextPolisher::TextPolisher(std::string api_token, std::string language, std::string api_url) : api_token_(std::move(api_token)), language_(std::move(language)), api_url_(std::move(api_url))
+TextPolisher::TextPolisher(std::string api_token, std::string language, std::string api_url, std::string model) : api_token_(std::move(api_token)), language_(std::move(language)), api_url_(std::move(api_url)), model_(std::move(model))
 {
 }
 

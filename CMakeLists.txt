@@ -35,12 +35,20 @@ endif()
 # miniaudio
 include_directories(third_party/miniaudio)
 
+set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(WHISPER_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/whisper.cpp whisper-build EXCLUDE_FROM_ALL)
+
 # Source files (Explicit list to avoid GLOB issues)
 set(SOURCE_FILES
     "src/audio_capture.cpp"
     "src/audio_capture.h"
     "src/cloud_stt_worker.cpp"
     "src/cloud_stt_worker.h"
+    "src/whisper_worker.cpp"
+    "src/whisper_worker.h"
     "src/cue_player.cpp"
     "src/cue_player.h"
     "src/main.cpp"
@@ -48,6 +56,8 @@ set(SOURCE_FILES
     "src/resource/app.rc"
     "src/mvi_config.cpp"
     "src/mvi_config.h"
+    "src/mvi_logger.cpp"
+    "src/mvi_logger.h"
     "src/mvi_utils.cpp"
     "src/mvi_utils.h"
     "src/json_websocket_stt_session.cpp"
@@ -85,6 +95,7 @@ endif()
 target_link_libraries(${MY_EXECUTABLE_NAME}
     PRIVATE
     fmt::fmt
+    whisper
     CURL::libcurl
     nlohmann_json::nlohmann_json
     tomlplusplus::tomlplusplus
