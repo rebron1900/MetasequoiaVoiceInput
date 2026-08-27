@@ -26,10 +26,28 @@ jobs:
       - name: Set up MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Cache vcpkg dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            vcpkg_installed
+            C:\vcpkg\downloads
+          key: windows-vcpkg-x64-static-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+          restore-keys: |
+            windows-vcpkg-x64-static-
+
       - name: Install vcpkg dependencies
         shell: pwsh
         run: |
           & "C:\vcpkg\vcpkg.exe" install --triplet x64-windows-static --x-manifest-root . --x-install-root "${{ github.workspace }}\vcpkg_installed"
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: windows-cmake-build-${{ github.sha }}
+          restore-keys: |
+            windows-cmake-build-
 
       - name: Configure CMake
         shell: pwsh
