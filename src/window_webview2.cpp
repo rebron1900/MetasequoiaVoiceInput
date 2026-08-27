@@ -8,7 +8,9 @@
 #include <filesystem>
 #include <fstream>
 #include <intsafe.h>
+#include <mutex>
 #include <nlohmann/json.hpp>
+#include <curl/curl.h>
 #include <shellapi.h>
 #include <WebView2.h>
 #include <winuser.h>
@@ -111,6 +113,78 @@ void SendSettingsConfigToWebView()
     const nlohmann::json payload = {{"config", nlohmann::json::parse(config_json)}, {"loadError", load_error}};
     const std::wstring script = L"window.__applyHostConfig && window.__applyHostConfig(" + mvi_utils::utf8_to_wstring(payload.dump()) + L");";
     g_state.settings_webview->ExecuteScript(script.c_str(), nullptr);
+}
+
+size_t ModelsWriteCallback(void *contents, size_t size, size_t count, void *user_data)
+{
+    auto *buffer = static_cast<std::string *>(user_data);
+    buffer->append(static_cast<const char *>(contents), size * count);
+    return size * count;
+}
+
+void SendModelsResultToWebView(const nlohmann::json &payload)
+{
+    if (g_state.settings_webview == nullptr) return;
+    const std::wstring script = L"window.__onModelsResult && window.__onModelsResult(" + mvi_utils::utf8_to_wstring(payload.dump()) + L");";
+    g_state.settings_webview->ExecuteScript(script.c_str(), nullptr);
+}
+
+void FetchModels(const std::string &endpoint, const std::string &token)
+{
+    static std::once_flag curl_once;
+    std::call_once(curl_once, []() { curl_global_init(CURL_GLOBAL_DEFAULT); });
+    if (!mvi_config::IsSafeApiEndpoint(endpoint))
+    {
+        SendModelsResultToWebView({{"models", nlohmann::json::array()}, {"message", "模型接口地址不安全"}});
+        return;
+    }
+    CURL *curl = curl_easy_init();
+    if (curl == nullptr)
+    {
+        SendModelsResultToWebView({{"models", nlohmann::json::array()}, {"message", "无法初始化网络请求"}});
+        return;
+    }
+    std::string response;
+    std::string url = endpoint;
+    const std::string marker = "/chat/completions";
+    const size_t marker_pos = url.find(marker);
+    if (marker_pos != std::string::npos) url.replace(marker_pos, marker.size(), "/models");
+    else if (!url.empty() && url.back() == '/') url += "models";
+    else url += "/models";
+    struct curl_slist *headers = nullptr;
+    headers = curl_slist_append(headers, "Accept: application/json");
+    const std::string auth = "Authorization: Bearer " + token;
+    if (!token.empty()) headers = curl_slist_append(headers, auth.c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, ModelsWriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 5000L);
+    const CURLcode result = curl_easy_perform(curl);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    if (result != CURLE_OK)
+    {
+        SendModelsResultToWebView({{"models", nlohmann::json::array()}, {"message", curl_easy_strerror(result)}});
+        return;
+    }
+    try
+    {
+        const auto json = nlohmann::json::parse(response);
+        nlohmann::json models = nlohmann::json::array();
+        if (json.contains("data") && json["data"].is_array())
+        {
+            for (const auto &item : json["data"])
+            {
+                if (item.contains("id") && item["id"].is_string()) models.push_back(item["id"]);
+            }
+        }
+        SendModelsResultToWebView({{"models", models}});
+    }
+    catch (const std::exception &e)
+    {
+        SendModelsResultToWebView({{"models", nlohmann::json::array()}, {"message", std::string("模型列表解析失败: ") + e.what()}});
+    }
 }
 
 void SendSettingsSaveResultToWebView(bool success, const std::string &message)
@@ -982,7 +1056,13 @@ void CreateSettingsWebViewIfNeeded()
                                     return S_OK;
                                 }
 
-                                if (action == "save_settings")
+                                if (action == "list_models")
+                                 {
+                                     FetchModels(message.value("endpoint", ""), message.value("token", ""));
+                                     return S_OK;
+                                 }
+
+                                 if (action == "save_settings")
                                 {
                                     if (!message.contains("config") || !message["config"].is_object())
                                     {

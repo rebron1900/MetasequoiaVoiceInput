@@ -11,6 +11,9 @@ struct ApiConfig
     std::string token;
     std::string endpoint;
     std::string model;
+    std::string prompt;
+    std::string model_type;
+    int chunk_ms = 40;
 };
 
 struct RuntimeConfig
@@ -24,6 +27,7 @@ struct RuntimeConfig
     std::string language = "zh-cn";
     bool polish_text = false;
     bool notification_sound = true;
+    std::string activation_key = "right_alt";
     bool debug_logging = true;
     std::string log_file = "logs/metasequoia-voice-input.log";
     std::string stt_provider = "cloud_siliconflow";

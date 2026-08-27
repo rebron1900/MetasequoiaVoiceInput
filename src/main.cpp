@@ -33,6 +33,7 @@
 
 std::string g_cloud_token;
 std::string g_language = "zh-cn";
+std::string g_activation_key = "right_alt";
 bool g_polish_text = false;
 bool g_notification_sound = true;
 TextOutputMethod g_output_method = TextOutputMethod::SendInput;
@@ -108,7 +109,7 @@ LRESULT CALLBACK keyboard_hook_proc(int nCode, WPARAM wParam, LPARAM lParam)
                 }
             }
         }
-        else if (kb != nullptr && kb->vkCode == VK_F9)
+        else if (kb != nullptr && kb->vkCode == VK_F9 && g_activation_key == "ctrl_f9")
         {
             const bool is_key_down = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
             const bool is_key_up = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
@@ -135,7 +136,7 @@ LRESULT CALLBACK keyboard_hook_proc(int nCode, WPARAM wParam, LPARAM lParam)
                 }
             }
         }
-        else if (kb != nullptr && kb->vkCode == VK_RMENU)
+        else if (kb != nullptr && kb->vkCode == VK_RMENU && g_activation_key == "right_alt")
         {
             const bool is_key_down = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
             const bool is_key_up = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
@@ -229,6 +230,7 @@ int main()
     mvi_logger::Write("INIT", "Configuration loaded; provider=" + runtime_config.stt_provider + ", endpoint=" + runtime_config.asr.endpoint + ", token_present=" + (runtime_config.asr.token.empty() ? "no" : "yes"));
     g_cloud_token = runtime_config.asr.token;
     g_language = runtime_config.language;
+    g_activation_key = runtime_config.activation_key;
     g_polish_text = runtime_config.polish_text;
     g_notification_sound = runtime_config.notification_sound;
     g_output_method = ParseTextOutputMethod(runtime_config.output_method);
@@ -244,10 +246,12 @@ int main()
         return 1;
     }
 
-    const bool safe_asr_endpoint = runtime_config.stt_provider == "json_websocket_streaming"
-        ? mvi_config::IsSafeStreamingEndpoint(runtime_config.asr.endpoint)
-        : mvi_config::IsSafeApiEndpoint(runtime_config.asr.endpoint);
-    if (!safe_asr_endpoint || !mvi_config::IsSafeApiEndpoint(runtime_config.polish.endpoint))
+    const bool safe_asr_endpoint = runtime_config.stt_provider == "local_whisper"
+        ? true
+        : runtime_config.stt_provider == "json_websocket_streaming"
+            ? mvi_config::IsSafeStreamingEndpoint(runtime_config.asr.endpoint)
+            : mvi_config::IsSafeApiEndpoint(runtime_config.asr.endpoint);
+    if (!safe_asr_endpoint || (runtime_config.polish_text && !mvi_config::IsSafeApiEndpoint(runtime_config.polish.endpoint)))
     {
         const char *message = "config.toml contains an unsafe API endpoint.";
         MessageBoxA(nullptr, message, "MetasequoiaVoiceInput - Configuration Error", MB_ICONERROR);
@@ -274,7 +278,7 @@ int main()
         }
         else if (runtime_config.stt_provider == "json_websocket_streaming")
         {
-            stt = std::make_unique<JsonWebSocketStreamingWorker>(runtime_config.asr.endpoint, runtime_config.asr.token, runtime_config.language, runtime_config.streaming_chunk_ms);
+            stt = std::make_unique<JsonWebSocketStreamingWorker>(runtime_config.asr.endpoint, runtime_config.asr.token, runtime_config.language, runtime_config.asr.chunk_ms);
             printf("[INIT] JSON WebSocket streaming ASR Ready.\n");
         }
         else
@@ -286,7 +290,7 @@ int main()
 
         if (g_polish_text)
         {
-            text_polisher = std::make_unique<TextPolisher>(runtime_config.polish.token, runtime_config.language, runtime_config.polish.endpoint, runtime_config.polish.model);
+            text_polisher = std::make_unique<TextPolisher>(runtime_config.polish.token, runtime_config.language, runtime_config.polish.endpoint, runtime_config.polish.model, runtime_config.polish.prompt);
             printf("[INIT] Text polishing enabled.\n");
         }
         else
