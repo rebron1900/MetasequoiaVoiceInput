@@ -1,4 +1,5 @@
 #include "cloud_stt_worker.h"
+#include "mvi_logger.h"
 #include "wav_writer.h"
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
@@ -12,7 +13,7 @@ static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *use
     return size * nmemb;
 }
 
-CloudSttWorker::CloudSttWorker(const std::string &api_token) : api_token_(api_token)
+CloudSttWorker::CloudSttWorker(std::string api_token, std::string api_url, std::string model) : api_token_(std::move(api_token)), api_url_(std::move(api_url)), model_(std::move(model))
 {
     curl_global_init(CURL_GLOBAL_ALL);
 }
@@ -67,38 +68,38 @@ std::string CloudSttWorker::recognize(const std::vector<float> &pcm)
         // Timeout
         curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
 
-        // Perform request
         res = curl_easy_perform(curl);
+        long response_code = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+        mvi_logger::Write("STT-HTTP", "request result curl=" + std::to_string(static_cast<int>(res)) + " http=" + std::to_string(response_code) + " response_bytes=" + std::to_string(readBuffer.size()));
 
         if (res != CURLE_OK)
         {
-            std::cerr << "[CloudSTT] curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+            mvi_logger::Write("STT-HTTP", std::string("curl error: ") + curl_easy_strerror(res));
         }
         else
         {
-            // Parse JSON response
             try
             {
-                // Response format: {"text": "Transcribed text"}
-                auto json = nlohmann::json::parse(readBuffer);
-                if (json.contains("text"))
+                const auto json = nlohmann::json::parse(readBuffer);
+                if (json.contains("text") && json["text"].is_string())
                 {
-                    std::string text = json["text"].get<std::string>();
-                    // std::cout << "[CloudSTT] Recognized: " << text << std::endl;
+                    const std::string text = json["text"].get<std::string>();
+                    mvi_logger::Write("STT-HTTP", "text field present, length=" + std::to_string(text.size()));
                     return text;
                 }
-                else if (json.contains("error"))
+                if (json.contains("error"))
                 {
-                    std::cerr << "[CloudSTT] API Error: " << json["error"] << std::endl;
+                    mvi_logger::Write("STT-HTTP", "API error: " + json["error"].dump());
                 }
                 else
                 {
-                    std::cerr << "[CloudSTT] Unexpected response: " << readBuffer << std::endl;
+                    mvi_logger::Write("STT-HTTP", "unexpected response: " + readBuffer.substr(0, 300));
                 }
             }
             catch (const std::exception &e)
             {
-                std::cerr << "[CloudSTT] JSON Parse Error: " << e.what() << " | Raw: " << readBuffer << std::endl;
+                mvi_logger::Write("STT-HTTP", std::string("JSON parse error: ") + e.what() + " raw=" + readBuffer.substr(0, 300));
             }
         }
 

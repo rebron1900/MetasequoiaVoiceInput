@@ -10,10 +10,10 @@
 namespace mvi_utils
 {
 std::wstring utf8_to_wstring(const std::string &str);
-std::string retrive_token();
 int GetTaskbarHeight();
 RECT GetMonitorCoordinates();
 RECT GetMainMonitorCoordinates();
-std::wstring resolve_asset_audio_path(std::string filename);
+std::wstring resolve_asset_audio_path(const std::string &filename);
+std::wstring GetExecutableDirectory();
 FLOAT GetForegroundWindowScale();
 } // namespace mvi_utils

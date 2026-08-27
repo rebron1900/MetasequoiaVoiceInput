@@ -1,28 +1,56 @@
-# 自动语音识别（ASR）配置
+# 兼容旧版本的镜像配置；新版本请使用下方 profiles。
 [asr_api]
-# API 基础地址
 endpoint = "https://api.siliconflow.cn/v1/audio/transcriptions"
-# 服务提供商（如：azure、openai、deepgram 等）
-provider = "siliconflow"
-# API 访问令牌
-token = "<YOUR_OWN_TOKE>"
+provider = "cloud_siliconflow"
+token = ""
+model = "TeleAI/TeleSpeechASR"
 
-# 文本润色配置
 [polish_api]
-# API 基础地址
 endpoint = "https://api.siliconflow.cn/v1/chat/completions"
-# 服务提供商（如：azure、openai、deepgram 等）
 provider = "siliconflow"
-# API 访问令牌
-token = "<YOUR_OWN_TOKE>"
+token = ""
+model = "Qwen/Qwen3-8B"
+
+[asr_profiles.default]
+provider = "cloud_siliconflow"
+endpoint = "https://api.siliconflow.cn/v1/audio/transcriptions"
+token = ""
+model = "TeleAI/TeleSpeechASR"
+
+# 三种 ASR 模式：cloud_siliconflow（普通 HTTP）、json_websocket_streaming（WebSocket 流式）、local_whisper（本地模型）。
+# 本地模型模式：provider = "local_whisper"，model_type 可选 whisper_ggml、sensevoice、funasr_nano、qwen3_asr、parakeet、firered_asr、x_asr。
+# model_variant 填模型变体，model_directory 为程序目录下的模型存储目录。
+# [asr_profiles.local-whisper]
+# provider = "local_whisper"
+# model_type = "whisper_ggml"
+# model_variant = "base"
+# model_directory = "models"
+# model = "models/ggml-base.bin"
+
+[polish_profiles.default]
+provider = "siliconflow"
+endpoint = "https://api.siliconflow.cn/v1/chat/completions"
+token = ""
+model = "Qwen/Qwen3-8B"
 
 # 基础设置
 [settings]
+active_asr_profile = "default"
+active_polish_profile = "default"
+# 开发阶段建议开启，日志写入程序目录 logs/。
+debug_logging = true
+log_file = "logs/metasequoia-voice-input.log"
 # 偏好语言
 language = "zh-cn"
 # 触发时是否播放提示音
 notification_sound = true
+# 激活按键：right_alt 或 ctrl_f9
+activation_key = "right_alt"
 # 上屏前是否要先进行文本润色
 polish_text = false
-# 可以选择的值有：local_whisper, cloud_siliconflow
+# ASR 传输方式：cloud_siliconflow（HTTP 文件转写）或 json_websocket_streaming（统一 JSON WebSocket 流式协议）
 stt_provider = "cloud_siliconflow"
+# 流式模式每个 PCM16 binary frame 的时长，范围 20-200
+streaming_chunk_ms = 40
+# 文本输出方式：send_input 或 clipboard_paste
+output_method = "send_input"

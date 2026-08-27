@@ -21,7 +21,7 @@ size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
 }
 } // namespace
 
-TextPolisher::TextPolisher(const std::string &api_token, const std::string &language) : api_token_(api_token), language_(language)
+TextPolisher::TextPolisher(std::string api_token, std::string language, std::string api_url, std::string model, std::string prompt) : api_token_(std::move(api_token)), language_(std::move(language)), api_url_(std::move(api_url)), model_(std::move(model)), prompt_(std::move(prompt))
 {
 }
 
@@ -53,7 +53,8 @@ std::string TextPolisher::polish(const std::string &original_text) const
 
     nlohmann::json payload;
     payload["model"] = model_;
-    const std::string system_prompt = "你是语音输入法的文本清洗器，只做最小必要修改。\n- 删除无意义停顿词（嗯、啊、哦、呃等）\n- 删除明显重复\n- 不润色、不扩写、不改写句式\n只输出最终文本。\n输出语言与输入保持一致，优先使用配置语言：" + language_;
+    const std::string default_prompt = "你是语音输入法的文本清洗器，只做最小必要修改。\n- 删除无意义停顿词（嗯、啊、哦、呃等）\n- 删除明显重复\n- 不润色、不扩写、不改写句式\n只输出最终文本。";
+    const std::string system_prompt = (prompt_.empty() ? default_prompt : prompt_) + "\n输出语言与输入保持一致，优先使用配置语言：" + language_;
 
     payload["messages"] = {
         {{"role", "system"}, {"content", system_prompt}},

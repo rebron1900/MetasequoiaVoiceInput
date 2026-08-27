@@ -10,14 +10,19 @@
 #include <atomic>
 #include <stdexcept>
 #include <vector>
+#include <cstdint>
+#include <filesystem>
 #include <cmath>
 #include <algorithm>
 #include "vad.h"
 #include "audio_capture.h"
 #include "cloud_stt_worker.h"
+#include "json_websocket_streaming_worker.h"
+#include "whisper_worker.h"
 #include "send_input.h"
 #include "mvi_utils.h"
 #include "mvi_config.h"
+#include "mvi_logger.h"
 #include "wave_overlay.h"
 #include "cue_player.h"
 #include "text_polisher.h"
@@ -28,7 +33,10 @@
 
 std::string g_cloud_token;
 std::string g_language = "zh-cn";
+std::string g_activation_key = "right_alt";
 bool g_polish_text = false;
+bool g_notification_sound = true;
+TextOutputMethod g_output_method = TextOutputMethod::SendInput;
 
 namespace
 {
@@ -45,6 +53,9 @@ std::atomic<bool> g_lctrl_pressed{false};
 std::atomic<bool> g_rctrl_pressed{false};
 std::atomic<bool> g_f9_pressed{false};
 std::atomic<bool> g_ralt_lock_mode{false};
+std::atomic<uint64_t> g_audio_callback_calls{0};
+std::atomic<uint64_t> g_audio_callback_frames{0};
+std::atomic<float> g_audio_peak_rms{0.0f};
 DWORD g_main_thread_id = 0;
 
 void force_release_ralt_key()
@@ -98,7 +109,7 @@ LRESULT CALLBACK keyboard_hook_proc(int nCode, WPARAM wParam, LPARAM lParam)
                 }
             }
         }
-        else if (kb != nullptr && kb->vkCode == VK_F9)
+        else if (kb != nullptr && kb->vkCode == VK_F9 && g_activation_key == "ctrl_f9")
         {
             const bool is_key_down = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
             const bool is_key_up = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
@@ -125,7 +136,7 @@ LRESULT CALLBACK keyboard_hook_proc(int nCode, WPARAM wParam, LPARAM lParam)
                 }
             }
         }
-        else if (kb != nullptr && kb->vkCode == VK_RMENU)
+        else if (kb != nullptr && kb->vkCode == VK_RMENU && g_activation_key == "right_alt")
         {
             const bool is_key_down = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
             const bool is_key_up = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
@@ -214,10 +225,42 @@ int main()
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
 
-    // Set up token
-    g_cloud_token = mvi_utils::retrive_token();
-    g_language = mvi_config::GetLanguage();
-    g_polish_text = mvi_config::GetPolishTextEnabled();
+    const mvi_config::RuntimeConfig runtime_config = mvi_config::LoadRuntimeConfig();
+    mvi_logger::Initialize(runtime_config.log_file, runtime_config.debug_logging);
+    mvi_logger::Write("INIT", "Configuration loaded; provider=" + runtime_config.stt_provider + ", endpoint=" + runtime_config.asr.endpoint + ", token_present=" + (runtime_config.asr.token.empty() ? "no" : "yes"));
+    g_cloud_token = runtime_config.asr.token;
+    g_language = runtime_config.language;
+    g_activation_key = runtime_config.activation_key;
+    g_polish_text = runtime_config.polish_text;
+    g_notification_sound = runtime_config.notification_sound;
+    g_output_method = ParseTextOutputMethod(runtime_config.output_method);
+
+    if (!mvi_config::GetLastLoadError().empty())
+    {
+        const std::string message = mvi_config::GetLastLoadError();
+        MessageBoxA(nullptr, message.c_str(), "MetasequoiaVoiceInput - Configuration Error", MB_ICONERROR);
+        if (need_com_uninitialize)
+        {
+            CoUninitialize();
+        }
+        return 1;
+    }
+
+    const bool safe_asr_endpoint = runtime_config.stt_provider == "local_whisper"
+        ? true
+        : runtime_config.stt_provider == "json_websocket_streaming"
+            ? mvi_config::IsSafeStreamingEndpoint(runtime_config.asr.endpoint)
+            : mvi_config::IsSafeApiEndpoint(runtime_config.asr.endpoint);
+    if (!safe_asr_endpoint || (runtime_config.polish_text && !mvi_config::IsSafeApiEndpoint(runtime_config.polish.endpoint)))
+    {
+        const char *message = "config.toml contains an unsafe API endpoint.";
+        MessageBoxA(nullptr, message, "MetasequoiaVoiceInput - Configuration Error", MB_ICONERROR);
+        if (need_com_uninitialize)
+        {
+            CoUninitialize();
+        }
+        return 1;
+    }
 
     printf("--- METASEQUOIA VOICE INPUT START ---\n");
     fflush(stdout);
@@ -225,13 +268,33 @@ int main()
     try
     {
         VadSegmenter vad;
-        std::unique_ptr<SttService> stt = std::make_unique<CloudSttWorker>(g_cloud_token);
+        std::unique_ptr<SttService> stt;
+        if (runtime_config.stt_provider == "local_whisper")
+        {
+            if (runtime_config.asr.model_type != "whisper_ggml" && runtime_config.asr.model_type != "ggml-base" && runtime_config.asr.model_type != "ggml-tiny" && runtime_config.asr.model_type != "ggml-small" && runtime_config.asr.model_type != "ggml-medium")
+            {
+                throw std::runtime_error("当前本地引擎已完成模型管理，但尚未接入 sherpa-onnx Windows 推理运行时: " + runtime_config.asr.model_type);
+            }
+            std::filesystem::path model_path = std::filesystem::u8path(runtime_config.asr.model);
+            if (model_path.is_relative()) model_path = std::filesystem::path(mvi_utils::GetExecutableDirectory()) / model_path;
+            stt = std::make_unique<WhisperWorker>(model_path.u8string());
+            printf("[INIT] Local Whisper ASR Ready.\n");
+        }
+        else if (runtime_config.stt_provider == "json_websocket_streaming")
+        {
+            stt = std::make_unique<JsonWebSocketStreamingWorker>(runtime_config.asr.endpoint, runtime_config.asr.token, runtime_config.language, runtime_config.asr.chunk_ms);
+            printf("[INIT] JSON WebSocket streaming ASR Ready.\n");
+        }
+        else
+        {
+            stt = std::make_unique<CloudSttWorker>(runtime_config.asr.token, runtime_config.asr.endpoint, runtime_config.asr.model);
+            printf("[INIT] Cloud HTTP STT Ready.\n");
+        }
         std::unique_ptr<TextPolisher> text_polisher;
-        printf("[INIT] Cloud STT Ready.\n");
 
         if (g_polish_text)
         {
-            text_polisher = std::make_unique<TextPolisher>(g_cloud_token, g_language);
+            text_polisher = std::make_unique<TextPolisher>(runtime_config.polish.token, runtime_config.language, runtime_config.polish.endpoint, runtime_config.polish.model, runtime_config.polish.prompt);
             printf("[INIT] Text polishing enabled.\n");
         }
         else
@@ -261,37 +324,63 @@ int main()
             while (!stt_stop)
             {
                 std::vector<float> samples;
-
                 {
                     std::unique_lock<std::mutex> lock(stt_mutex);
                     stt_cv.wait(lock, [&]() { return stt_stop || !stt_queue.empty(); });
-
-                    if (stt_stop)
-                        break;
-
+                    if (stt_stop) break;
                     samples = std::move(stt_queue.front());
                     stt_queue.pop_front();
                 }
 
-                // 只有这里才允许慢操作
-                auto start = std::chrono::steady_clock::now();
-                std::string text = stt->recognize(samples);
-                auto end = std::chrono::steady_clock::now();
-                std::cout << "[STT] Time: " << std::chrono::duration<double>(end - start).count() << "s\n";
-                if (!text.empty())
+                try
                 {
+                    printf("[STT] Begin recognition: %zu samples.\n", samples.size());
+                    fflush(stdout);
+                    mvi_logger::Write("STT", "begin recognition samples=" + std::to_string(samples.size()));
+                    const auto start = std::chrono::steady_clock::now();
+                    const std::string text = stt->recognize(samples);
+                    const auto end = std::chrono::steady_clock::now();
+                    const double elapsed_seconds = std::chrono::duration<double>(end - start).count();
+                    printf("[STT] Time: %.3fs, result_length=%zu.\n", elapsed_seconds, text.size());
+                    fflush(stdout);
+                    mvi_logger::Write("STT", "recognition complete seconds=" + std::to_string(elapsed_seconds) + " result_length=" + std::to_string(text.size()));
+                    if (text.empty())
+                    {
+                        printf("[STT] Empty recognition result; output skipped.\n");
+                        fflush(stdout);
+                        continue;
+                    }
+
                     printf("[STT] Recognized: %s\n", text.c_str());
                     std::string final_text = text;
                     if (text_polisher != nullptr)
                     {
-                        auto polish_start = std::chrono::steady_clock::now();
+                        const auto polish_start = std::chrono::steady_clock::now();
                         final_text = text_polisher->polish(text);
-                        auto polish_end = std::chrono::steady_clock::now();
-                        std::cout << "[POLISH] Time: " << std::chrono::duration<double>(polish_end - polish_start).count() << "s\n";
-                        printf("[POLISH] Output: %s\n", final_text.c_str());
+                        const auto polish_end = std::chrono::steady_clock::now();
+                        printf("[POLISH] Time: %.3fs, result_length=%zu.\n", std::chrono::duration<double>(polish_end - polish_start).count(), final_text.size());
+                        fflush(stdout);
                     }
+                    if (final_text.empty())
+                    {
+                        printf("[OUTPUT] Empty final text; output skipped.\n");
+                        fflush(stdout);
+                        continue;
+                    }
+                    mvi_logger::Write("OUTPUT", "sending text length=" + std::to_string(final_text.size()));
+                    send_text(mvi_utils::utf8_to_wstring(final_text), g_output_method);
+                }
+                catch (const std::exception &e)
+                {
+                    printf("[STT ERROR] %s\n", e.what());
                     fflush(stdout);
-                    send_text(mvi_utils::utf8_to_wstring(final_text));
+                    mvi_logger::Write("STT ERROR", e.what());
+                }
+                catch (...)
+                {
+                    printf("[STT ERROR] Unknown exception.\n");
+                    fflush(stdout);
+                    mvi_logger::Write("STT ERROR", "unknown exception");
                 }
             }
         });
@@ -299,23 +388,33 @@ int main()
         auto audio_callback_vad = [&](const float *data, size_t count) {
             try
             {
+                ++g_audio_callback_calls;
+                g_audio_callback_frames += count;
                 double sum_sq = 0.0;
                 for (size_t i = 0; i < count; ++i)
                 {
                     sum_sq += data[i] * data[i];
                 }
                 const float rms = count > 0 ? static_cast<float>(std::sqrt(sum_sq / static_cast<double>(count))) : 0.0f;
+                float previous_peak = g_audio_peak_rms.load();
+                while (rms > previous_peak && !g_audio_peak_rms.compare_exchange_weak(previous_peak, rms)) {}
                 wave_overlay.set_input_level(std::min(1.0f, rms * 8.0f));
 
                 vad.process(data, count);
                 if (vad.should_flush())
                 {
                     auto samples = vad.take_audio();
+                    mvi_logger::Write("VAD", "auto flush samples=" + std::to_string(samples.size()));
+                    if (samples.empty())
+                    {
+                        mvi_logger::Write("VAD", "auto flush skipped because audio was empty");
+                    }
+                    else
                     {
                         std::lock_guard<std::mutex> lock(stt_mutex);
                         stt_queue.push_back(std::move(samples));
+                        stt_cv.notify_one();
                     }
-                    stt_cv.notify_one();
                 }
             }
             catch (const std::exception &e)
@@ -333,12 +432,16 @@ int main()
         auto audio_callback_raw = [&](const float *data, size_t count) {
             try
             {
+                ++g_audio_callback_calls;
+                g_audio_callback_frames += count;
                 double sum_sq = 0.0;
                 for (size_t i = 0; i < count; ++i)
                 {
                     sum_sq += data[i] * data[i];
                 }
                 const float rms = count > 0 ? static_cast<float>(std::sqrt(sum_sq / static_cast<double>(count))) : 0.0f;
+                float previous_peak = g_audio_peak_rms.load();
+                while (rms > previous_peak && !g_audio_peak_rms.compare_exchange_weak(previous_peak, rms)) {}
                 wave_overlay.set_input_level(std::min(1.0f, rms * 8.0f));
 
                 std::lock_guard<std::mutex> lock(record_mutex);
@@ -423,6 +526,9 @@ int main()
 
                 if (!toggle_mode_active)
                 {
+                    g_audio_callback_calls = 0;
+                    g_audio_callback_frames = 0;
+                    g_audio_peak_rms = 0.0f;
                     if (!audio.start(audio_callback_vad))
                     {
                         printf("[AUDIO] Failed to start capture.\n");
@@ -434,7 +540,10 @@ int main()
                         toggle_mode_active = true;
                         wave_overlay.show();
                         wave_overlay.set_listening(true);
-                        cue_player.play_start();
+                        if (g_notification_sound)
+                        {
+                            cue_player.play_start();
+                        }
                         printf("[AUDIO] Started (Ctrl+F9 toggle mode).\n");
                         fflush(stdout);
                     }
@@ -442,12 +551,16 @@ int main()
                 else
                 {
                     audio.stop();
+                    mvi_logger::Write("MIC", "toggle stop callbacks=" + std::to_string(g_audio_callback_calls.load()) + " frames=" + std::to_string(g_audio_callback_frames.load()) + " peak_rms=" + std::to_string(g_audio_peak_rms.load()));
                     audio_started = false;
                     toggle_mode_active = false;
                     wave_overlay.set_listening(false);
                     wave_overlay.set_input_level(0.0f);
                     wave_overlay.hide();
-                    cue_player.play_end();
+                    if (g_notification_sound)
+                    {
+                        cue_player.play_end();
+                    }
                     auto samples = vad.take_audio();
                     if (!samples.empty())
                     {
@@ -463,6 +576,7 @@ int main()
                 break;
             }
             case WM_APP_RALT_RECORD_START: {
+                mvi_logger::Write("HOOK", "receive RAlt START toggle=" + std::to_string(toggle_mode_active) + " ralt=" + std::to_string(ralt_mode_active) + " audio=" + std::to_string(audio_started));
                 if (toggle_mode_active)
                 {
                     printf("[AUDIO] Busy: Ctrl+F9 toggle mode is active.\n");
@@ -472,6 +586,7 @@ int main()
 
                 if (ralt_mode_active || audio_started)
                 {
+                    mvi_logger::Write("HOOK", "RAlt START dropped because recording is already active");
                     break;
                 }
 
@@ -479,6 +594,9 @@ int main()
                     std::lock_guard<std::mutex> lock(record_mutex);
                     recorded_samples.clear();
                 }
+                g_audio_callback_calls = 0;
+                g_audio_callback_frames = 0;
+                g_audio_peak_rms = 0.0f;
 
                 if (!audio.start(audio_callback_raw))
                 {
@@ -513,8 +631,10 @@ int main()
                 break;
             }
             case WM_APP_RALT_RECORD_STOP: {
+                mvi_logger::Write("HOOK", "receive RAlt STOP active=" + std::to_string(ralt_mode_active));
                 if (!ralt_mode_active)
                 {
+                    mvi_logger::Write("HOOK", "RAlt STOP dropped because no active recording");
                     break;
                 }
 
@@ -547,6 +667,7 @@ int main()
 
                 const auto elapsed = std::chrono::steady_clock::now() - ralt_record_start_time;
                 const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+                mvi_logger::Write("MIC", "RAlt stop duration_ms=" + std::to_string(elapsed_ms) + " samples=" + std::to_string(samples.size()) + " callbacks=" + std::to_string(g_audio_callback_calls.load()) + " frames=" + std::to_string(g_audio_callback_frames.load()) + " peak_rms=" + std::to_string(g_audio_peak_rms.load()));
                 const size_t min_samples = static_cast<size_t>((k_sample_rate * k_ralt_min_record_ms) / 1000);
 
                 if (elapsed_ms < k_ralt_min_record_ms || samples.size() < min_samples)
@@ -568,6 +689,7 @@ int main()
                 {
                     printf("[AUDIO] No audio captured.\n");
                     fflush(stdout);
+                    mvi_logger::Write("MIC", "RAlt stop had no captured audio");
                 }
                 break;
             }
