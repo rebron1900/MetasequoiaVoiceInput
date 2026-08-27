@@ -271,6 +271,10 @@ int main()
         std::unique_ptr<SttService> stt;
         if (runtime_config.stt_provider == "local_whisper")
         {
+            if (runtime_config.asr.model_type != "whisper_ggml" && runtime_config.asr.model_type != "ggml-base" && runtime_config.asr.model_type != "ggml-tiny" && runtime_config.asr.model_type != "ggml-small" && runtime_config.asr.model_type != "ggml-medium")
+            {
+                throw std::runtime_error("当前本地引擎已完成模型管理，但尚未接入 sherpa-onnx Windows 推理运行时: " + runtime_config.asr.model_type);
+            }
             std::filesystem::path model_path = std::filesystem::u8path(runtime_config.asr.model);
             if (model_path.is_relative()) model_path = std::filesystem::path(mvi_utils::GetExecutableDirectory()) / model_path;
             stt = std::make_unique<WhisperWorker>(model_path.u8string());

@@ -8,7 +8,11 @@
 #include <filesystem>
 #include <fstream>
 #include <intsafe.h>
+#include <atomic>
 #include <mutex>
+#include <thread>
+#include <vector>
+#include <set>
 #include <nlohmann/json.hpp>
 #include <curl/curl.h>
 #include <shellapi.h>
@@ -26,6 +30,7 @@ constexpr UINT WM_APP_TRAY_ICON = WM_APP + 120;
 constexpr UINT WM_APP_TRAY_SHOW_MENU = WM_APP + 121;
 constexpr UINT WM_APP_TRAY_RESIZE_TO_MENU = WM_APP + 122;
 constexpr UINT WM_APP_TRAY_HIDE_MENU = WM_APP + 123;
+constexpr UINT WM_APP_SETTINGS_LOCAL_MODEL_RESULT = WM_APP + 124;
 constexpr UINT k_tray_icon_id = 1;
 constexpr wchar_t k_tray_window_class[] = L"MetasequoiaVoiceInput.TrayWindow";
 constexpr wchar_t k_tray_menu_window_class[] = L"MetasequoiaVoiceInput.TrayMenuWindow";
@@ -185,6 +190,202 @@ void FetchModels(const std::string &endpoint, const std::string &token)
     {
         SendModelsResultToWebView({{"models", nlohmann::json::array()}, {"message", std::string("模型列表解析失败: ") + e.what()}});
     }
+}
+
+std::string LocalModelUrl(const std::string &model_type, const std::string &variant)
+{
+    if (model_type == "whisper_ggml")
+    {
+        static const std::set<std::string> variants = {"tiny", "tiny.en", "base", "base.en", "small", "small.en", "medium", "medium.en", "large-v3-turbo-q5_0"};
+        if (variants.find(variant) != variants.end()) return "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-" + variant + ".bin";
+    }
+    if (model_type == "sensevoice")
+    {
+        if (variant == "small-full") return "https://github.com/BryceWG/BiBi-Keyboard/releases/download/models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.zip";
+        if (variant == "small-int8") return "https://github.com/BryceWG/BiBi-Keyboard/releases/download/models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.zip";
+    }
+    if (model_type == "funasr_nano")
+    {
+        if (variant == "mlt-int8") return "https://github.com/BryceWG/BiBi-Keyboard/releases/download/models/sherpa-onnx-funasr-mlt-nano-int8-2026-03-21.zip";
+        if (variant == "nano-int8") return "https://github.com/BryceWG/BiBi-Keyboard/releases/download/models/sherpa-onnx-funasr-nano-int8-2025-12-30.zip";
+    }
+    if (model_type == "qwen3_asr")
+    {
+        if (variant == "qwen3-1.7b-int8") return "https://github.com/BryceWG/BiBi-Keyboard/releases/download/models/sherpa-onnx-qwen3-asr-1.7B-int8-2026-08-04.zip";
+        if (variant == "qwen3-0.6b-int8") return "https://github.com/BryceWG/BiBi-Keyboard/releases/download/models/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25.zip";
+    }
+    if (model_type == "parakeet")
+    {
+        if (variant == "0.6b-v2-int8") return "https://github.com/BryceWG/BiBi-Keyboard/releases/download/models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.zip";
+        if (variant == "0.6b-v3-int8") return "https://github.com/BryceWG/BiBi-Keyboard/releases/download/models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.zip";
+    }
+    if (model_type == "firered_asr" && variant == "ctc-int8") return "https://github.com/BryceWG/BiBi-Keyboard/releases/download/models/sherpa-onnx-fire-red-asr2-ctc-zh_en-int8-2026-02-25.zip";
+    if (model_type == "x_asr" && variant == "x-asr-480ms") return "https://github.com/BryceWG/BiBi-Keyboard/releases/download/models/sherpa-onnx-streaming-x-asr-480ms-zh-en.zip";
+    return {};
+}
+
+bool SafeModelComponent(const std::string &value)
+{
+    if (value.empty() || value == "." || value == "..")
+    {
+        return false;
+    }
+    return value.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.") == std::string::npos;
+}
+
+void PostLocalModelResultToWebView(const nlohmann::json &payload)
+{
+    if (g_state.settings_webview == nullptr) return;
+    const std::wstring script = L"window.__onLocalModelResult && window.__onLocalModelResult(" + mvi_utils::utf8_to_wstring(payload.dump()) + L");";
+    g_state.settings_webview->ExecuteScript(script.c_str(), nullptr);
+}
+
+std::wstring EscapePowerShellSingleQuoted(const std::wstring &value)
+{
+    std::wstring escaped;
+    escaped.reserve(value.size() + 8);
+    for (const wchar_t ch : value)
+    {
+        if (ch == L'\'') escaped += L"''";
+        else escaped += ch;
+    }
+    return escaped;
+}
+
+std::string RelativeToRoot(const std::filesystem::path &target, const std::filesystem::path &root)
+{
+    std::error_code ec;
+    const std::filesystem::path relative = std::filesystem::relative(target, root, ec);
+    if (ec || relative.empty()) return target.u8string();
+    return relative.generic_u8string();
+}
+
+nlohmann::json DownloadLocalModelImpl(const std::string &model_type, const std::string &variant, const std::string &model_directory)
+{
+    if (!SafeModelComponent(model_type) || !SafeModelComponent(variant) || !SafeModelComponent(model_directory))
+    {
+        return {{"success", false}, {"message", "不支持的本地模型或版本"}};
+    }
+    const std::string url = LocalModelUrl(model_type, variant);
+    if (url.empty() || url.rfind("https://", 0) != 0)
+    {
+        return {{"success", false}, {"message", "模型下载地址无效"}};
+    }
+    static std::once_flag curl_once;
+    std::call_once(curl_once, []() { curl_global_init(CURL_GLOBAL_DEFAULT); });
+    const std::filesystem::path root = std::filesystem::path(mvi_utils::GetExecutableDirectory());
+    const std::filesystem::path model_dir = root / mvi_utils::utf8_to_wstring(model_directory) / mvi_utils::utf8_to_wstring(model_type) / mvi_utils::utf8_to_wstring(variant);
+    const bool whisper_model = model_type == "whisper_ggml";
+    const std::filesystem::path download_root = root / mvi_utils::utf8_to_wstring(model_directory);
+    const std::filesystem::path archive_path = download_root / (mvi_utils::utf8_to_wstring(model_type) + L"-" + mvi_utils::utf8_to_wstring(variant) + (whisper_model ? L".bin.part" : L".download.zip"));
+    std::error_code fs_error;
+    std::filesystem::create_directories(whisper_model ? download_root : model_dir, fs_error);
+    if (fs_error)
+    {
+        return {{"success", false}, {"message", "无法创建模型目录"}};
+    }
+    CURL *curl = curl_easy_init();
+    if (curl == nullptr)
+    {
+        return {{"success", false}, {"message", "无法初始化下载"}};
+    }
+    FILE *file = nullptr;
+    _wfopen_s(&file, archive_path.c_str(), L"wb");
+    if (file == nullptr)
+    {
+        curl_easy_cleanup(curl);
+        return {{"success", false}, {"message", "无法创建模型临时文件"}};
+    }
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
+    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 0L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
+    const CURLcode result = curl_easy_perform(curl);
+    fclose(file);
+    curl_easy_cleanup(curl);
+    if (result != CURLE_OK)
+    {
+        std::filesystem::remove(archive_path, fs_error);
+        return {{"success", false}, {"message", std::string("模型下载失败: ") + curl_easy_strerror(result)}};
+    }
+    if (whisper_model)
+    {
+        const std::filesystem::path final_path = download_root / (L"ggml-" + mvi_utils::utf8_to_wstring(variant) + L".bin");
+        std::filesystem::rename(archive_path, final_path, fs_error);
+        if (fs_error)
+        {
+            return {{"success", false}, {"message", "无法保存 Whisper 模型文件"}};
+        }
+        return {{ "success", true }, { "message", "模型下载完成: whisper_ggml/" + variant }, { "path", RelativeToRoot(final_path, root) }};
+    }
+    const std::wstring quoted_archive = EscapePowerShellSingleQuoted(archive_path.wstring());
+    const std::wstring quoted_target = EscapePowerShellSingleQuoted(model_dir.wstring());
+    const std::wstring command = L"-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"Expand-Archive -LiteralPath '" + quoted_archive + L"' -DestinationPath '" + quoted_target + L"' -Force\"";
+    STARTUPINFOW startup{};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process{};
+    std::vector<wchar_t> command_line(command.begin(), command.end());
+    command_line.push_back(L'\0');
+    const BOOL started = CreateProcessW(L"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", command_line.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, root.c_str(), &startup, &process);
+    if (!started)
+    {
+        std::filesystem::remove(archive_path, fs_error);
+        return {{ "success", false }, { "message", "无法启动模型解压程序" }};
+    }
+    const DWORD wait_result = WaitForSingleObject(process.hProcess, 30 * 60 * 1000);
+    DWORD exit_code = 1;
+    if (wait_result == WAIT_OBJECT_0) GetExitCodeProcess(process.hProcess, &exit_code);
+    else TerminateProcess(process.hProcess, 1);
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    std::filesystem::remove(archive_path, fs_error);
+    if (wait_result != WAIT_OBJECT_0 || exit_code != 0)
+    {
+        return {{ "success", false }, { "message", wait_result == WAIT_OBJECT_0 ? "模型解压失败" : "模型解压超时" }};
+    }
+    return {{ "success", true }, { "message", "模型下载完成: " + model_type + "/" + variant }, { "path", RelativeToRoot(model_dir, root) }};
+}
+
+std::atomic<bool> g_local_model_download_running{false};
+
+void DownloadLocalModelAsync(const std::string &model_type, const std::string &variant, const std::string &model_directory, HWND settings_window)
+{
+    if (settings_window == nullptr)
+    {
+        return;
+    }
+    bool expected = false;
+    if (!g_local_model_download_running.compare_exchange_strong(expected, true))
+    {
+        PostLocalModelResultToWebView({{"success", false}, {"message", "已有模型正在下载，请等待完成。"}});
+        return;
+    }
+    std::thread([model_type, variant, model_directory, settings_window]() {
+        nlohmann::json payload = {{"success", false}, {"message", "模型下载失败"}};
+        try
+        {
+            payload = DownloadLocalModelImpl(model_type, variant, model_directory);
+        }
+        catch (const std::exception &e)
+        {
+            payload = {{"success", false}, {"message", std::string("模型下载失败: ") + e.what()}};
+        }
+        catch (...)
+        {
+            payload = {{"success", false}, {"message", "模型下载失败: 未知错误"}};
+        }
+        g_local_model_download_running.store(false);
+        auto *buffered = new std::string(payload.dump());
+        if (!PostMessageW(settings_window, WM_APP_SETTINGS_LOCAL_MODEL_RESULT, 0, reinterpret_cast<LPARAM>(buffered)))
+        {
+            delete buffered;
+        }
+    }).detach();
 }
 
 void SendSettingsSaveResultToWebView(bool success, const std::string &message)
@@ -586,6 +787,21 @@ LRESULT CALLBACK SettingsWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
     case WM_SIZE:
         ResizeSettingsWebViewBounds();
         return 0;
+    case WM_APP_SETTINGS_LOCAL_MODEL_RESULT: {
+        auto *buffered = reinterpret_cast<std::string *>(lParam);
+        if (buffered != nullptr)
+        {
+            try
+            {
+                PostLocalModelResultToWebView(nlohmann::json::parse(*buffered));
+            }
+            catch (const std::exception &)
+            {
+            }
+            delete buffered;
+        }
+        return 0;
+    }
     case WM_CLOSE:
         HideSettingsWindow();
         return 0;
@@ -1059,6 +1275,12 @@ void CreateSettingsWebViewIfNeeded()
                                 if (action == "list_models")
                                  {
                                      FetchModels(message.value("endpoint", ""), message.value("token", ""));
+                                     return S_OK;
+                                 }
+
+                                 if (action == "download_local_model")
+                                 {
+                                     DownloadLocalModelAsync(message.value("model_type", ""), message.value("variant", ""), message.value("model_directory", "models"), g_state.settings_window);
                                      return S_OK;
                                  }
 

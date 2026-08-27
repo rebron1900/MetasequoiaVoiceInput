@@ -13,6 +13,8 @@ struct ApiConfig
     std::string model;
     std::string prompt;
     std::string model_type;
+    std::string model_variant = "base";
+    std::string model_directory = "models";
     int chunk_ms = 40;
 };
 

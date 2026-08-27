@@ -18,11 +18,13 @@ token = ""
 model = "TeleAI/TeleSpeechASR"
 
 # 三种 ASR 模式：cloud_siliconflow（普通 HTTP）、json_websocket_streaming（WebSocket 流式）、local_whisper（本地模型）。
-# 本地 Whisper 示例：将 provider 改为 local_whisper，model 填 ggml 模型相对程序目录的路径。
+# 本地模型模式：provider = "local_whisper"，model_type 可选 whisper_ggml、sensevoice、funasr_nano、qwen3_asr、parakeet、firered_asr、x_asr。
+# model_variant 填模型变体，model_directory 为程序目录下的模型存储目录。
 # [asr_profiles.local-whisper]
 # provider = "local_whisper"
-# endpoint = ""
-# token = ""
+# model_type = "whisper_ggml"
+# model_variant = "base"
+# model_directory = "models"
 # model = "models/ggml-base.bin"
 
 [polish_profiles.default]

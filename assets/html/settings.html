@@ -206,7 +206,7 @@
             <div><div class="field-label">模型路径 / 名称</div><p class="field-hint">本地 Whisper 填相对程序目录的 ggml 模型路径；云端填模型名称。</p></div>
             <input id="asr-model" type="text" autocomplete="off" />
           </div>
-          <div class="field" id="asr-model-type-field" hidden><div><div class="field-label">本地模型类型</div><p class="field-hint">选择本地 Whisper 模型家族。</p></div><select id="asr-model-type"><option value="ggml-tiny">Whisper Tiny</option><option value="ggml-base">Whisper Base</option><option value="ggml-small">Whisper Small</option><option value="ggml-medium">Whisper Medium</option></select></div><div class="field" id="asr-download-field" hidden><div><div class="field-label">模型下载</div><p class="field-hint">模型下载后请重启应用。</p></div><button class="button secondary" id="asr-download-btn" type="button">一键下载</button></div><div class="field" id="streaming-chunk-field" hidden>
+          <div class="field" id="asr-model-type-field" hidden><div><div class="field-label">本地模型引擎</div><p class="field-hint">选择 Whisper GGML 或 BiBi-Keyboard 的本地 ASR 模型。</p></div><select id="asr-model-type"><option value="whisper_ggml">Whisper GGML</option><option value="sensevoice">SenseVoice</option><option value="funasr_nano">FunASR Nano</option><option value="qwen3_asr">Qwen3-ASR</option><option value="parakeet">Parakeet</option><option value="firered_asr">FireRedASR V2</option><option value="x_asr">X-ASR</option></select></div><div class="field" id="asr-model-variant-field" hidden><div><div class="field-label">模型版本</div><p class="field-hint">选择 BiBi-Keyboard 官方模型包版本。</p></div><select id="asr-model-variant"><option value="base">Base</option></select></div><div class="field" id="asr-download-field" hidden><div><div class="field-label">模型下载</div><p class="field-hint">模型下载后请重启应用。</p></div><button class="button secondary" id="asr-download-btn" type="button">下载当前模型</button></div><div class="field" id="streaming-chunk-field" hidden>
             <div><div class="field-label">音频分片</div><p class="field-hint">每个 WebSocket binary frame 的音频时长，建议 40 ms。</p></div>
             <select id="streaming-chunk-ms"><option value="20">20 ms</option><option value="40">40 ms</option><option value="60">60 ms</option><option value="100">100 ms</option><option value="200">200 ms</option></select>
           </div>
@@ -305,9 +305,9 @@
 
   <script>
     const defaultConfig = {
-      asr_api: { provider: "cloud_siliconflow", token: "", endpoint: "https://api.siliconflow.cn/v1/audio/transcriptions", model: "TeleAI/TeleSpeechASR", model_type: "ggml-base", chunk_ms: 40 },
+      asr_api: { provider: "cloud_siliconflow", token: "", endpoint: "https://api.siliconflow.cn/v1/audio/transcriptions", model: "TeleAI/TeleSpeechASR", model_type: "whisper_ggml", model_variant: "base", model_directory: "models", chunk_ms: 40 },
       polish_api: { provider: "siliconflow", token: "", endpoint: "https://api.siliconflow.cn/v1/chat/completions", model: "Qwen/Qwen3-8B", prompt: "你是语音输入法的文本清洗器，只做最小必要修改。\n- 删除无意义停顿词\n- 删除明显重复\n只输出最终文本。" },
-      asr_profiles: { default: { provider: "cloud_siliconflow", token: "", endpoint: "https://api.siliconflow.cn/v1/audio/transcriptions", model: "TeleAI/TeleSpeechASR" } },
+      asr_profiles: { default: { provider: "cloud_siliconflow", token: "", endpoint: "https://api.siliconflow.cn/v1/audio/transcriptions", model: "TeleAI/TeleSpeechASR", model_type: "whisper_ggml", model_variant: "base", model_directory: "models", chunk_ms: 40 } },
       polish_profiles: { default: { provider: "siliconflow", token: "", endpoint: "https://api.siliconflow.cn/v1/chat/completions", model: "Qwen/Qwen3-8B", prompt: "你是语音输入法的文本清洗器，只做最小必要修改。\n- 删除无意义停顿词\n- 删除明显重复\n只输出最终文本。" } },
       settings: { active_asr_profile: "default", active_polish_profile: "default", language: "zh-cn", polish_text: false, notification_sound: true, activation_key: "right_alt", debug_logging: true, log_file: "logs/metasequoia-voice-input.log", stt_provider: "cloud_siliconflow", output_method: "send_input", streaming_chunk_ms: 40 }
     };
@@ -326,7 +326,14 @@
 
     function normalizeProfile(profile, fallback) {
       const value = profile && typeof profile === "object" ? profile : {};
-      return { provider: typeof value.provider === "string" ? value.provider : fallback.provider, token: typeof value.token === "string" ? value.token : "", endpoint: typeof value.endpoint === "string" ? value.endpoint : fallback.endpoint, model: typeof value.model === "string" ? value.model : fallback.model, prompt: typeof value.prompt === "string" ? value.prompt : (fallback.prompt || ""), model_type: typeof value.model_type === "string" ? value.model_type : (fallback.model_type || "ggml-base"), chunk_ms: Number.isInteger(value.chunk_ms) ? value.chunk_ms : (fallback.chunk_ms || 40) };
+      const knownEngines = ["whisper_ggml", "sensevoice", "funasr_nano", "qwen3_asr", "parakeet", "firered_asr", "x_asr"];
+      let modelType = typeof value.model_type === "string" && value.model_type ? value.model_type : (fallback.model_type || "whisper_ggml");
+      let modelVariant = typeof value.model_variant === "string" && value.model_variant ? value.model_variant : (fallback.model_variant || "base");
+      if (!knownEngines.includes(modelType)) {
+        if (modelType.startsWith("ggml-")) { modelVariant = modelVariant === "base" ? modelType.slice(5) : modelVariant; modelType = "whisper_ggml"; }
+        else { modelType = "whisper_ggml"; }
+      }
+      return { provider: typeof value.provider === "string" ? value.provider : fallback.provider, token: typeof value.token === "string" ? value.token : "", endpoint: typeof value.endpoint === "string" ? value.endpoint : fallback.endpoint, model: typeof value.model === "string" ? value.model : fallback.model, prompt: typeof value.prompt === "string" ? value.prompt : (fallback.prompt || ""), model_type: modelType, model_variant: modelVariant, model_directory: typeof value.model_directory === "string" ? value.model_directory : (fallback.model_directory || "models"), chunk_ms: Number.isInteger(value.chunk_ms) ? value.chunk_ms : (fallback.chunk_ms || 40) };
     }
 
     function mergedConfig(config) {
@@ -358,7 +365,7 @@
       $("stt-provider").value = asr.provider;
       $("asr-endpoint").value = asr.endpoint;
       $("asr-token").value = asr.token;
-      $("asr-model").value = asr.model; $("asr-model-type").value = asr.model_type; $("polish-prompt").value = polish.prompt; $("polish-model-list").value = polish.model;
+      $("asr-model").value = asr.model; $("asr-model-type").value = asr.model_type; updateLocalModelVariants(); $("asr-model-variant").value = asr.model_variant; $("polish-prompt").value = polish.prompt; $("polish-model-list").value = polish.model;
       $("polish-provider").value = polish.provider;
       $("polish-endpoint").value = polish.endpoint;
       $("polish-token").value = polish.token;
@@ -374,7 +381,7 @@
 
     function updateCurrentProfiles() {
       const asr = state.asr_profiles[asrEditing];
-      Object.assign(asr, { provider: $("stt-provider").value, endpoint: $("asr-endpoint").value, token: $("asr-token").value, model: $("asr-model").value, model_type: $("asr-model-type").value, chunk_ms: Number($("streaming-chunk-ms").value) });
+      Object.assign(asr, { provider: $("stt-provider").value, endpoint: $("asr-endpoint").value, token: $("asr-token").value, model: $("asr-model").value, model_type: $("asr-model-type").value, model_variant: $("asr-model-variant").value, model_directory: asr.model_directory || "models", chunk_ms: Number($("streaming-chunk-ms").value) });
       const polish = state.polish_profiles[polishEditing];
       Object.assign(polish, { provider: $("polish-provider").value, endpoint: $("polish-endpoint").value, token: $("polish-token").value, model: $("polish-model-list").value || polish.model, prompt: $("polish-prompt").value });
       state.settings.language = $("language").value;
@@ -385,10 +392,27 @@
        state.settings.activation_key = $("activation-key").value;
     }
 
-    function updateStreamingControls() {
+    function updateLocalModelVariants() {
+       const type = $("asr-model-type").value;
+       const variants = {
+         whisper_ggml: [["tiny", "Whisper Tiny"], ["tiny.en", "Whisper Tiny English"], ["base", "Whisper Base"], ["base.en", "Whisper Base English"], ["small", "Whisper Small"], ["small.en", "Whisper Small English"], ["medium", "Whisper Medium"], ["medium.en", "Whisper Medium English"], ["large-v3-turbo-q5_0", "Whisper Large V3 Turbo Q5_0"]],
+         sensevoice: [["small-int8", "SenseVoice Small Int8"], ["small-full", "SenseVoice Small Full"]],
+         funasr_nano: [["nano-int8", "FunASR Nano Int8"], ["mlt-int8", "FunASR MLT Nano Int8"]],
+         qwen3_asr: [["qwen3-0.6b-int8", "Qwen3-ASR 0.6B Int8"], ["qwen3-1.7b-int8", "Qwen3-ASR 1.7B Int8"]],
+         parakeet: [["0.6b-v3-int8", "Parakeet 0.6B V3 Int8"], ["0.6b-v2-int8", "Parakeet 0.6B V2 Int8"]],
+         firered_asr: [["ctc-int8", "FireRedASR V2 CTC Int8"]],
+         x_asr: [["x-asr-480ms", "X-ASR 480ms"]]
+       }[type] || [["base", "Base"]];
+       const current = $("asr-model-variant").value;
+       $("asr-model-variant").innerHTML = variants.map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
+       $("asr-model-variant").value = variants.some(([value]) => value === current) ? current : variants[0][0];
+     }
+
+     function updateStreamingControls() {
       const provider = $("stt-provider").value;
       const streaming = provider === "json_websocket_streaming";
       const local = provider === "local_whisper";
+       $("asr-model-variant-field").hidden = !local;
       $("streaming-chunk-field").hidden = !streaming; $("asr-model-type-field").hidden = !local; $("asr-download-field").hidden = !local;
       $("streaming-protocol-notice").hidden = !streaming;
       $("asr-endpoint").disabled = local;
@@ -450,7 +474,9 @@
     $("asr-delete-btn").addEventListener("click", () => deleteProfile("asr"));
     $("polish-delete-btn").addEventListener("click", () => deleteProfile("polish"));
     $("stt-provider").addEventListener("change", () => { updateCurrentProfiles(); updateStreamingControls(); validateAsrEndpoint(); });
-     $("asr-download-btn").addEventListener("click", () => setStatus("模型下载入口已预留，请先手动放置 ggml 模型文件。", "ok"));
+     $("asr-model-type").addEventListener("change", () => { updateLocalModelVariants(); updateCurrentProfiles(); });
+     $("asr-download-btn").addEventListener("click", () => { updateCurrentProfiles(); const asr = state.asr_profiles[asrEditing]; if (!window.chrome?.webview) { setStatus("当前不在应用宿主环境，无法下载模型。", "err"); return; } const btn = $("asr-download-btn"); btn.disabled = true; btn.textContent = "下载中..."; window.chrome.webview.postMessage({ action: "download_local_model", model_type: asr.model_type, variant: asr.model_variant, model_directory: asr.model_directory || "models" }); setStatus("正在下载模型，请勿关闭窗口..."); });
+     window.__onLocalModelResult = (result) => { const btn = $("asr-download-btn"); btn.disabled = false; btn.textContent = "下载当前模型"; if (result?.success && result.path) { $("asr-model").value = result.path; updateCurrentProfiles(); setStatus((result?.message || "模型下载完成。") + " 请点击保存设置。", "ok"); return; } setStatus(result?.message || "模型下载失败。", result?.success ? "ok" : "err"); };
      $("polish-model-refresh").addEventListener("click", () => { if (!window.chrome?.webview) { setStatus("当前不在应用宿主环境，无法获取模型。", "err"); return; } updateCurrentProfiles(); window.chrome.webview.postMessage({ action: "list_models", endpoint: $("polish-endpoint").value, token: $("polish-token").value }); setStatus("正在获取模型列表..."); });
      window.__onModelsResult = (result) => { const models = Array.isArray(result?.models) ? result.models : []; $("polish-model-list").innerHTML = models.map((model) => `<option value="${model}">${model}</option>`).join(""); if (state?.polish_profiles[polishEditing]?.model) $("polish-model-list").value = state.polish_profiles[polishEditing].model; setStatus(models.length ? `已获取 ${models.length} 个模型。` : (result?.message || "未获取到模型。"), models.length ? "ok" : "err"); };
     $("asr-endpoint").addEventListener("input", validateAsrEndpoint);

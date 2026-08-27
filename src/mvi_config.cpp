@@ -20,7 +20,9 @@ mvi_config::RuntimeConfig DefaultConfig()
     config.asr.provider = "cloud_siliconflow";
     config.asr.endpoint = "https://api.siliconflow.cn/v1/audio/transcriptions";
     config.asr.model = "TeleAI/TeleSpeechASR";
-    config.asr.model_type = "ggml-base";
+    config.asr.model_type = "whisper_ggml";
+    config.asr.model_variant = "base";
+    config.asr.model_directory = "models";
     config.asr.chunk_ms = 40;
     config.polish.provider = "siliconflow";
     config.polish.endpoint = "https://api.siliconflow.cn/v1/chat/completions";
@@ -117,6 +119,14 @@ void LoadApiConfig(const toml::table &table, const char *section, mvi_config::Ap
     {
         config.model_type = model_type.value_or(config.model_type);
     }
+    if (const auto model_variant = table[section]["model_variant"]; model_variant.is_string())
+    {
+        config.model_variant = model_variant.value_or(config.model_variant);
+    }
+    if (const auto model_directory = table[section]["model_directory"]; model_directory.is_string())
+    {
+        config.model_directory = model_directory.value_or(config.model_directory);
+    }
     if (const auto chunk_ms = table[section]["chunk_ms"]; chunk_ms.is_integer())
     {
         config.chunk_ms = chunk_ms.value_or(config.chunk_ms);
@@ -132,12 +142,17 @@ void LoadApiProfiles(const toml::table &table, const char *section, std::map<std
             if (const auto *profile = value.as_table())
             {
                 mvi_config::ApiConfig config;
+                config.model_type = "whisper_ggml";
+                config.model_variant = "base";
+                config.model_directory = "models";
                 if (const auto provider = (*profile)["provider"]; provider.is_string()) config.provider = provider.value_or("");
                 if (const auto token = (*profile)["token"]; token.is_string()) config.token = token.value_or("");
                 if (const auto endpoint = (*profile)["endpoint"]; endpoint.is_string()) config.endpoint = endpoint.value_or("");
                 if (const auto model = (*profile)["model"]; model.is_string()) config.model = model.value_or("");
                 if (const auto prompt = (*profile)["prompt"]; prompt.is_string()) config.prompt = prompt.value_or("");
                 if (const auto model_type = (*profile)["model_type"]; model_type.is_string()) config.model_type = model_type.value_or("");
+                if (const auto model_variant = (*profile)["model_variant"]; model_variant.is_string()) config.model_variant = model_variant.value_or("base");
+                if (const auto model_directory = (*profile)["model_directory"]; model_directory.is_string()) config.model_directory = model_directory.value_or("models");
                 if (const auto chunk_ms = (*profile)["chunk_ms"]; chunk_ms.is_integer()) config.chunk_ms = chunk_ms.value_or(40);
                 profiles[std::string(name.str())] = std::move(config);
             }
@@ -147,7 +162,7 @@ void LoadApiProfiles(const toml::table &table, const char *section, std::map<std
 
  toml::table ApiConfigTable(const mvi_config::ApiConfig &config)
 {
-    return toml::table{{"provider", config.provider}, {"token", config.token}, {"endpoint", config.endpoint}, {"model", config.model}, {"prompt", config.prompt}, {"model_type", config.model_type}, {"chunk_ms", config.chunk_ms}};
+    return toml::table{{"provider", config.provider}, {"token", config.token}, {"endpoint", config.endpoint}, {"model", config.model}, {"prompt", config.prompt}, {"model_type", config.model_type}, {"model_variant", config.model_variant}, {"model_directory", config.model_directory}, {"chunk_ms", config.chunk_ms}};
 }
 
 void AssignStringIfPresent(const nlohmann::json &object, const char *key, std::string &target)
@@ -173,12 +188,17 @@ void AssignApiProfilesIfPresent(const nlohmann::json &object, std::map<std::stri
     {
         if (!value.is_object()) continue;
         mvi_config::ApiConfig profile;
+        profile.model_type = "whisper_ggml";
+        profile.model_variant = "base";
+        profile.model_directory = "models";
         AssignStringIfPresent(value, "provider", profile.provider);
         AssignStringIfPresent(value, "token", profile.token);
         AssignStringIfPresent(value, "endpoint", profile.endpoint);
         AssignStringIfPresent(value, "model", profile.model);
         AssignStringIfPresent(value, "prompt", profile.prompt);
         AssignStringIfPresent(value, "model_type", profile.model_type);
+        AssignStringIfPresent(value, "model_variant", profile.model_variant);
+        AssignStringIfPresent(value, "model_directory", profile.model_directory);
         if (value.contains("chunk_ms") && value["chunk_ms"].is_number_integer()) profile.chunk_ms = value["chunk_ms"].get<int>();
         profiles[name] = std::move(profile);
     }
@@ -412,11 +432,11 @@ std::string mvi_config::ReadConfigAsJson()
 {
     const RuntimeConfig config = LoadRuntimeConfig();
     nlohmann::json asr_profiles = nlohmann::json::object();
-    for (const auto &[name, profile] : config.asr_profiles) asr_profiles[name] = {{"provider", profile.provider}, {"token", profile.token}, {"endpoint", profile.endpoint}, {"model", profile.model}, {"model_type", profile.model_type}, {"chunk_ms", profile.chunk_ms}};
+    for (const auto &[name, profile] : config.asr_profiles) asr_profiles[name] = {{"provider", profile.provider}, {"token", profile.token}, {"endpoint", profile.endpoint}, {"model", profile.model}, {"model_type", profile.model_type}, {"model_variant", profile.model_variant}, {"model_directory", profile.model_directory}, {"chunk_ms", profile.chunk_ms}};
     nlohmann::json polish_profiles = nlohmann::json::object();
     for (const auto &[name, profile] : config.polish_profiles) polish_profiles[name] = {{"provider", profile.provider}, {"token", profile.token}, {"endpoint", profile.endpoint}, {"model", profile.model}, {"prompt", profile.prompt}};
     const nlohmann::json root = {
-        {"asr_api", {{"provider", config.asr.provider}, {"token", config.asr.token}, {"endpoint", config.asr.endpoint}, {"model", config.asr.model}, {"model_type", config.asr.model_type}, {"chunk_ms", config.asr.chunk_ms}}},
+        {"asr_api", {{"provider", config.asr.provider}, {"token", config.asr.token}, {"endpoint", config.asr.endpoint}, {"model", config.asr.model}, {"model_type", config.asr.model_type}, {"model_variant", config.asr.model_variant}, {"model_directory", config.asr.model_directory}, {"chunk_ms", config.asr.chunk_ms}}},
         {"polish_api", {{"provider", config.polish.provider}, {"token", config.polish.token}, {"endpoint", config.polish.endpoint}, {"model", config.polish.model}, {"prompt", config.polish.prompt}}},
         {"asr_profiles", asr_profiles},
         {"polish_profiles", polish_profiles},
@@ -465,6 +485,8 @@ bool mvi_config::WriteConfigFromJson(const std::string &config_json, std::string
         AssignStringIfPresent(asr, "endpoint", config.asr.endpoint);
         AssignStringIfPresent(asr, "model", config.asr.model);
         AssignStringIfPresent(asr, "model_type", config.asr.model_type);
+        AssignStringIfPresent(asr, "model_variant", config.asr.model_variant);
+        AssignStringIfPresent(asr, "model_directory", config.asr.model_directory);
         if (asr.contains("chunk_ms") && asr["chunk_ms"].is_number_integer()) config.asr.chunk_ms = asr["chunk_ms"].get<int>();
         config.asr_profiles[config.active_asr_profile] = config.asr;
     }
